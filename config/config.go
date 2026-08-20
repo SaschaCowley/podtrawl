@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"github.com/BurntSushi/toml"
-	"github.com/kr/pretty"
 )
 
 const appDirName string = "podtrawl"
@@ -28,10 +27,6 @@ func load(path string) (*Config, error) {
 		return nil, err
 	}
 	return &c, nil
-}
-
-func (c Config) String() string {
-	return pretty.Sprint(c)
 }
 
 var ErrLoad = errors.New("unable to load config")
