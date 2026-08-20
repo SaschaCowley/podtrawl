@@ -52,9 +52,13 @@ url = "https://example.org/another/feed.xml"
 
 Episodes are written to a directory named after the show title, alongside the executable.
 
+
+## Planned work
+
 * [ ] Track which episodes have been downloaded and don't redownload them
 * [ ] Sanitize directory and file names
 * [ ] Specify the download directory pattern globally, with per-feed overrides
 * [ ] Specify the episode filename pattern globally, with per-feed overrides
 * [ ] Support podcasting namespaces, such as the `itunes` and `podcast` namespaces
 * [ ] Cache feeds (`etag`, `ttl` etc), and respect feed properties (`ttl`, `skipDays`, `skipHours` etc)
+* [ ] (Optionally) parallelize downloads across multiple threads
