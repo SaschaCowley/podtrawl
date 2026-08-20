@@ -17,7 +17,10 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	run(ctx)
+	if err := run(ctx); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
 
 func run(ctx context.Context) error {
@@ -25,22 +28,33 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// A failing feed or episode shouldn't stop the run,
+	// but it must still be visible in the exit code so a scheduled run can be seen to have failed.
+	var failures int
 	for _, feed := range conf.Feeds {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			rss, err := getFeed(ctx, feed.Url)
-			if err != nil {
-				fmt.Println(err)
-				continue
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		rss, err := getFeed(ctx, feed.Url)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s: %v\n", feed.Url, err)
+			failures++
+			continue
+		}
+		for _, item := range rss.Channel.Items {
+			if err := ctx.Err(); err != nil {
+				return err
 			}
-			for _, item := range rss.Channel.Items {
-				if len(item.Enclosures) != 0 {
-					DownloadEpisode(ctx, rss.Channel.Title, item.Enclosures[0])
+			if len(item.Enclosures) != 0 {
+				if err := DownloadEpisode(ctx, rss.Channel.Title, item.Enclosures[0]); err != nil {
+					fmt.Fprintf(os.Stderr, "%s: %v\n", item.Enclosures[0].Url, err)
+					failures++
 				}
 			}
 		}
+	}
+	if failures > 0 {
+		return fmt.Errorf("completed with %d error(s)", failures)
 	}
 	return nil
 }
@@ -55,6 +69,9 @@ func getFeed(ctx context.Context, url string) (*feed.Rss, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch feed: %s", resp.Status)
+	}
 	rss, err := feed.Load(resp.Body)
 	if err != nil {
 		return nil, err
@@ -72,6 +89,9 @@ func DownloadEpisode(ctx context.Context, showTitle string, enclosure feed.Enclo
 		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download episode: %s", resp.Status)
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -89,8 +109,10 @@ func DownloadEpisode(ctx context.Context, showTitle string, enclosure feed.Enclo
 	if err != nil {
 		return err
 	}
-	if written != enclosure.Length {
-		fmt.Printf("Expected download to be %d bytes, got %d bytes instead.\n", enclosure.Length, written)
+	// Length is required by the RSS spec but is frequently absent or wrong,
+	// so only check it when the feed gives us something to check against.
+	if enclosure.Length > 0 && written != enclosure.Length {
+		fmt.Fprintf(os.Stderr, "download episode: expected %d bytes, got %d\n", enclosure.Length, written)
 	}
 	return nil
 }
