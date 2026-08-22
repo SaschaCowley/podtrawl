@@ -66,8 +66,11 @@ func run(ctx context.Context) error {
 					failures++
 				} else {
 					cache.SetDownloaded(feed.Url, key, true)
+					// An unsaved cache means we might have to do more work later,
+					// but shouldn't mean we abandon all the remaining downloads.
 					if err := cache.Save(); err != nil {
-						return err
+						fmt.Fprintf(os.Stderr, "%s: %v\n", enclosure.Url, err)
+						failures++
 					}
 				}
 			}
