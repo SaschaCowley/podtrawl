@@ -72,7 +72,13 @@ func (c *Cache) Downloaded(url, guid string) bool {
 func (c *Cache) SetDownloaded(url, guid string, downloaded bool) {
 	f := c.cacheFile.Feeds[url]
 	if f == nil {
+		if !downloaded {
+			return
+		}
 		f = &feed{}
+		if c.cacheFile.Feeds == nil {
+			c.cacheFile.Feeds = make(map[string]*feed)
+		}
 		c.cacheFile.Feeds[url] = f
 	}
 	guids := f.Downloaded

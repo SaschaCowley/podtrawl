@@ -20,21 +20,28 @@ func sampleCache() *Cache {
 	}
 }
 
+func emptyCache() *Cache {
+	return &Cache{}
+}
+
 func TestDownloaded(t *testing.T) {
 	tests := []struct {
-		name string
-		url  string
-		guid string
-		want bool
+		name  string
+		cache func() *Cache
+		url   string
+		guid  string
+		want  bool
 	}{
-		{"downloaded episode", "url1", "guid1", true},
-		{"undownloaded episode", "url1", "guid999", false},
-		{"show with no downloads", "url999", "guid999", false},
-		{"wrong url", "url2", "guid1", false},
+		{"downloaded episode", sampleCache, "url1", "guid1", true},
+		{"undownloaded episode", sampleCache, "url1", "guid999", false},
+		{"show with no downloads", sampleCache, "url999", "guid999", false},
+		{"wrong url", sampleCache, "url2", "guid1", false},
+		{"empty cache", emptyCache, "url1", "guid1", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := sampleCache().Downloaded(tt.url, tt.guid); got != tt.want {
+			cache := tt.cache()
+			if got := cache.Downloaded(tt.url, tt.guid); got != tt.want {
 				t.Errorf("Cache.Downloaded(%q, %q) = %t, want %t", tt.url, tt.guid, got, tt.want)
 			}
 		})
@@ -44,21 +51,24 @@ func TestDownloaded(t *testing.T) {
 func TestSetDownloaded(t *testing.T) {
 	tests := []struct {
 		name       string
+		cache      func() *Cache
 		url        string
 		guid       string
 		downloaded bool
 		prior      bool
 	}{
-		{"mark undownloaded episode as downloaded", "url1", "guid99", true, false},
-		{"mark undownloaded episode as not downloaded", "url1", "guid99", false, false},
-		{"mark downloaded episode as downloaded", "url1", "guid1", true, true},
-		{"mark downloaded episode as not downloaded", "url1", "guid1", false, true},
-		{"mark episode in new show as downloaded", "url99", "guid99", true, false},
-		{"mark episode in new show as not downloaded", "url99", "guid99", false, false},
+		{"mark undownloaded episode as downloaded", sampleCache, "url1", "guid99", true, false},
+		{"mark undownloaded episode as not downloaded", sampleCache, "url1", "guid99", false, false},
+		{"mark downloaded episode as downloaded", sampleCache, "url1", "guid1", true, true},
+		{"mark downloaded episode as not downloaded", sampleCache, "url1", "guid1", false, true},
+		{"mark episode in new show as downloaded", sampleCache, "url99", "guid99", true, false},
+		{"mark episode in new show as not downloaded", sampleCache, "url99", "guid99", false, false},
+		{"mark episode as downloaded in empty cache", emptyCache, "url1", "guid1", true, false},
+		{"mark episode as not downloaded in empty cache", emptyCache, "url1", "guid1", false, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cache := sampleCache()
+			cache := tt.cache()
 			feed := cache.cacheFile.Feeds[tt.url]
 			var oldGuids, newGuids []string
 			if feed != nil {
@@ -77,6 +87,11 @@ func TestSetDownloaded(t *testing.T) {
 			}
 			if tt.downloaded == tt.prior && !slices.Equal(oldGuids, newGuids) {
 				t.Errorf("expected downloaded guids to be unchanged.\nold: %#v\nnew: %#v", oldGuids, newGuids)
+			}
+			if feed == nil && !tt.downloaded {
+				if _, ok := cache.cacheFile.Feeds[tt.url]; ok {
+					t.Errorf("Cache.SetDownloaded(%q, %q, false) created an entry for an unknown show", tt.url, tt.guid)
+				}
 			}
 		})
 	}
