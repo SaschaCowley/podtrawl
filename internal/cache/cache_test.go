@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -131,5 +132,36 @@ func TestSaveRoundTrip(t *testing.T) {
 	}
 	if !slices.Equal(names, []string{cacheFileName}) {
 		t.Errorf("cache dir holds %q after Save, want only %q", names, cacheFileName)
+	}
+}
+
+func TestNewCorruptCache(t *testing.T) {
+	dir := t.TempDir()
+	// A save that was interrupted before rename-in-place existed.
+	partial := []byte(`{"feeds":{"url1":{"downloaded":["guid1"`)
+	if err := os.WriteFile(filepath.Join(dir, cacheFileName), partial, 0600); err != nil {
+		t.Fatal(err)
+	}
+	cache, err := New(&dir)
+	if !errors.Is(err, ErrCorrupt) {
+		t.Errorf("New(%q) on an undecodable cache = %v, want %v", dir, err, ErrCorrupt)
+	}
+	if cache == nil {
+		t.Fatalf("New(%q) on an undecodable cache = nil, want a usable empty cache", dir)
+	}
+	if cache.Downloaded("url1", "guid1") {
+		t.Errorf(`Cache.Downloaded("url1", "guid1") = true, want false: nothing decoded is to be trusted`)
+	}
+	// The bad file must not outlive the run that found it.
+	cache.SetDownloaded("url1", "guid1", true)
+	if err := cache.Save(); err != nil {
+		t.Fatalf("Cache.Save() = %v", err)
+	}
+	reopened, err := New(&dir)
+	if err != nil {
+		t.Fatalf("New(%q) after saving over an undecodable cache = %v", dir, err)
+	}
+	if !reopened.Downloaded("url1", "guid1") {
+		t.Errorf(`Cache.Downloaded("url1", "guid1") = false after reopening, want true`)
 	}
 }

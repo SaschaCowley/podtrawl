@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -33,7 +34,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	cache, err := cache.New(nil)
+	cache, err := newCache()
 	if err != nil {
 		return err
 	}
@@ -76,6 +77,21 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("completed with %d error(s)", failures)
 	}
 	return nil
+}
+
+// newCache creates the download cache,
+// reporting a cache that could not be read only as a warning.
+// Starting from an empty cache costs a re-download;
+// stopping here would cost the whole run.
+func newCache() (*cache.Cache, error) {
+	c, err := cache.New(nil)
+	if err != nil {
+		if !errors.Is(err, cache.ErrCorrupt) {
+			return nil, err
+		}
+		fmt.Fprintln(os.Stderr, err)
+	}
+	return c, nil
 }
 
 func getFeed(ctx context.Context, url string) (*feed.Rss, error) {

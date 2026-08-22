@@ -3,6 +3,7 @@ package cache
 import (
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -12,6 +13,9 @@ import (
 const cacheFileName = "cache.json"
 
 const dperm = 0755
+
+// ErrCorrupt reports a cache file that could not be decoded.
+var ErrCorrupt = errors.New("unreadable cache")
 
 type cacheFile struct {
 	Feeds map[string]*feed `json:"feeds,omitempty"`
@@ -28,8 +32,11 @@ type Cache struct {
 
 // New reads the cache in dir,
 // defaulting to a podtrawl directory under the user cache dir.
-// A cache that isn't there yet is not an error;
-// it opens empty and comes into existence on the first Save.
+//
+//   - A cache that isn't there yet is not an error;
+//     it opens empty and comes into existence on the first Save.
+//   - A corrupted cache causes New to return a cold Cache and ErrCorrupt;
+//     the invalid cache file will be overwritten the next time Save is called.
 func New(dir *string) (*Cache, error) {
 	var cacheDir string
 	if dir != nil {
@@ -56,7 +63,8 @@ func New(dir *string) (*Cache, error) {
 		return &cache, nil
 	}
 	if err := json.Unmarshal(data, &cache.cacheFile); err != nil {
-		return nil, err
+		cache.cacheFile = cacheFile{}
+		return &cache, fmt.Errorf("%w %s: %w", ErrCorrupt, cache.path, err)
 	}
 	return &cache, nil
 }
