@@ -1,10 +1,8 @@
 package cache
 
 import (
-	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -12,6 +10,8 @@ import (
 )
 
 const cacheFileName = "cache.json"
+
+const dperm = 0755
 
 type cacheFile struct {
 	Feeds map[string]*feed `json:"feeds,omitempty"`
@@ -23,10 +23,14 @@ type feed struct {
 
 type Cache struct {
 	cacheFile cacheFile
-	fd        *os.File
+	path      string
 }
 
-func Open(dir *string) (*Cache, error) {
+// New reads the cache in dir,
+// defaulting to a podtrawl directory under the user cache dir.
+// A cache that isn't there yet is not an error;
+// it opens empty and comes into existence on the first Save.
+func New(dir *string) (*Cache, error) {
 	var cacheDir string
 	if dir != nil {
 		cacheDir = *dir
@@ -37,48 +41,53 @@ func Open(dir *string) (*Cache, error) {
 			cacheDir = filepath.Join(dir, "podtrawl")
 		}
 	}
-	var fname = filepath.Join(cacheDir, cacheFileName)
-	const fmode = os.O_RDWR | os.O_CREATE
-	const fperm = 0644
-	f, err := os.OpenFile(fname, fmode, fperm)
+	if err := os.MkdirAll(cacheDir, dperm); err != nil {
+		return nil, err
+	}
+	cache := Cache{path: filepath.Join(cacheDir, cacheFileName)}
+	data, err := os.ReadFile(cache.path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			if err := os.MkdirAll(cacheDir, fperm); err != nil {
-				return nil, err
-			}
-			f, err = os.OpenFile(fname, fmode, fperm)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			return nil, err
+			return &cache, nil
 		}
+		return nil, err
 	}
-	cache := Cache{fd: f}
-	if err := json.UnmarshalDecode(jsontext.NewDecoder(f), &cache.cacheFile); err != nil && err != io.EOF {
-		f.Close()
+	if len(data) == 0 {
+		return &cache, nil
+	}
+	if err := json.Unmarshal(data, &cache.cacheFile); err != nil {
 		return nil, err
 	}
 	return &cache, nil
 }
 
-func (c *Cache) Close() error {
-	return c.fd.Close()
-}
-
-func (c *Cache) Save() error {
-	if c.fd == nil {
-		return fs.ErrClosed
-	}
+// Save writes the whole cache to a new file and renames it over the old one.
+// Replacing the file rather than overwriting it in place means an interrupted run
+// leaves the previous cache intact instead of a half-written one.
+func (c *Cache) Save() (err error) {
 	out, err := json.Marshal(c.cacheFile)
 	if err != nil {
 		return err
 	}
-	n, err := c.fd.WriteAt(out, 0)
+	// The temporary file has to share a directory with the cache
+	// for the rename to stay within one filesystem.
+	tmp, err := os.CreateTemp(filepath.Dir(c.path), cacheFileName+".*")
 	if err != nil {
 		return err
 	}
-	if err := c.fd.Truncate((int64)(n)); err != nil {
+	defer func() {
+		tmpPath := tmp.Name()
+		if cerr := tmp.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+		if err == nil {
+			err = os.Rename(tmpPath, c.path)
+		}
+		if err != nil {
+			os.Remove(tmpPath)
+		}
+	}()
+	if _, err := tmp.Write(out); err != nil {
 		return err
 	}
 	return nil

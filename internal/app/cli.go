@@ -33,11 +33,10 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	cache, err := cache.Open(nil)
+	cache, err := cache.New(nil)
 	if err != nil {
 		return err
 	}
-	defer cache.Close()
 	// A failing feed or episode shouldn't stop the run,
 	// but it must still be visible in the exit code so a scheduled run can be seen to have failed.
 	var failures int

@@ -1,6 +1,8 @@
 package cache
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 )
@@ -94,5 +96,40 @@ func TestSetDownloaded(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestSaveRoundTrip(t *testing.T) {
+	// A directory that isn't there yet also exercises the MkdirAll in New.
+	dir := filepath.Join(t.TempDir(), "podtrawl")
+	cache, err := New(&dir)
+	if err != nil {
+		t.Fatalf("New(%q) = %v", dir, err)
+	}
+	if cache.Downloaded("url1", "guid1") {
+		t.Errorf(`Cache.Downloaded("url1", "guid1") = true in a cache that does not exist yet, want false`)
+	}
+	cache.SetDownloaded("url1", "guid1", true)
+	if err := cache.Save(); err != nil {
+		t.Fatalf("Cache.Save() = %v", err)
+	}
+	reopened, err := New(&dir)
+	if err != nil {
+		t.Fatalf("New(%q) after Save = %v", dir, err)
+	}
+	if !reopened.Downloaded("url1", "guid1") {
+		t.Errorf(`Cache.Downloaded("url1", "guid1") = false after reopening, want true`)
+	}
+	// Save renames a temporary file into place; none of them should survive it.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	if !slices.Equal(names, []string{cacheFileName}) {
+		t.Errorf("cache dir holds %q after Save, want only %q", names, cacheFileName)
 	}
 }
