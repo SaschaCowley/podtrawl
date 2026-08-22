@@ -9,7 +9,8 @@ Behaviour and configuration are likely to change.
 
 ## Status
 
-Currently downloads every episode of every configured feed on each run into a directory named after the show.
+Currently downloads every episode of every configured feed into a directory named after the show.
+Episodes that have already been downloaded are skipped on subsequent runs.
 Directory and episode names are sanitised so that they are safe and portable across common file systems.
 
 ## Building
@@ -52,13 +53,33 @@ url = "https://example.org/another/feed.xml"
 
 Episodes are written to a directory named after the show title, alongside the executable.
 
+## Download cache
+
+podtrawl records what it has already downloaded in `cache.json`,
+so that a scheduled run only fetches episodes it has not seen before.
+The file lives in `<user cache dir>/podtrawl/`
+(e.g. `%LocalAppData%\podtrawl\` on Windows, `~/.cache/podtrawl/` on Linux, `~/Library/Caches/podtrawl/` on macOS).
+
+Episodes are identified by their feed's URL together with the item's "`guid`",
+falling back to the enclosure URL for the feeds that omit it.
+
+Deleting the file makes the next run download every episode again.
+An unreadable cache is reported on standard error,
+treated as empty, and replaced by the next successful download.
+
+## Exit status
+
+podtrawl exits 0 when every feed and episode was handled successfully, and 1 otherwise.
+Errors fetching feeds, downloading episodes, or updating the cache are reported on standard error,
+but do not stop processing.
+If such errors have occured in a run, podtrawl exits 1.
 
 ## Planned work
 
-* [ ] Track which episodes have been downloaded and don't redownload them
+* [x] Track which episodes have been downloaded and don't redownload them
 * [x] Sanitize directory and file names
 * [ ] Specify the download directory pattern globally, with per-feed overrides
 * [ ] Specify the episode filename pattern globally, with per-feed overrides
 * [ ] Support podcasting namespaces, such as the `itunes` and `podcast` namespaces
-* [ ] Cache feeds (`etag`, `ttl` etc), and respect feed properties (`ttl`, `skipDays`, `skipHours` etc)
+* [ ] Cache feed files and responses (`etag`, `ttl` etc), and respect feed properties (`ttl`, `skipDays`, `skipHours` etc)
 * [ ] (Optionally) parallelize downloads across multiple threads

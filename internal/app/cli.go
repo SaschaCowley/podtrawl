@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 
+	"ssch.cc/podtrawl/internal/cache"
 	"ssch.cc/podtrawl/internal/config"
 	"ssch.cc/podtrawl/internal/feed"
 	"ssch.cc/podtrawl/internal/fsname"
@@ -29,6 +31,10 @@ func CLI([]string) int {
 
 func run(ctx context.Context) error {
 	conf, err := config.Get(nil)
+	if err != nil {
+		return err
+	}
+	cache, err := newCache()
 	if err != nil {
 		return err
 	}
@@ -50,9 +56,22 @@ func run(ctx context.Context) error {
 				return err
 			}
 			if len(item.Enclosures) != 0 {
-				if err := DownloadEpisode(ctx, feed.Url, rss.Channel.Title, item.Enclosures[0]); err != nil {
-					fmt.Fprintf(os.Stderr, "%s: %v\n", item.Enclosures[0].Url, err)
+				enclosure := item.Enclosures[0]
+				key := episodeKey(item, enclosure)
+				if cache.Downloaded(feed.Url, key) {
+					continue
+				}
+				if err := DownloadEpisode(ctx, feed.Url, rss.Channel.Title, enclosure); err != nil {
+					fmt.Fprintf(os.Stderr, "%s: %v\n", enclosure.Url, err)
 					failures++
+				} else {
+					cache.SetDownloaded(feed.Url, key, true)
+					// An unsaved cache means we might have to do more work later,
+					// but shouldn't mean we abandon all the remaining downloads.
+					if err := cache.Save(); err != nil {
+						fmt.Fprintf(os.Stderr, "%s: %v\n", enclosure.Url, err)
+						failures++
+					}
 				}
 			}
 		}
@@ -61,6 +80,21 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("completed with %d error(s)", failures)
 	}
 	return nil
+}
+
+// newCache creates the download cache,
+// reporting a cache that could not be read only as a warning.
+// Starting from an empty cache costs a re-download;
+// stopping here would cost the whole run.
+func newCache() (*cache.Cache, error) {
+	c, err := cache.New(nil)
+	if err != nil {
+		if !errors.Is(err, cache.ErrCorrupt) {
+			return nil, err
+		}
+		fmt.Fprintln(os.Stderr, err)
+	}
+	return c, nil
 }
 
 func getFeed(ctx context.Context, url string) (*feed.Rss, error) {
@@ -124,6 +158,17 @@ func DownloadEpisode(ctx context.Context, feedUrl, showTitle string, enclosure f
 		fmt.Fprintf(os.Stderr, "download episode: expected %d bytes, got %d\n", enclosure.Length, written)
 	}
 	return nil
+}
+
+// episodeKey identifies an episode within its feed.
+// Guid is optional in RSS and some feeds send it empty,
+// so fall back to the enclosure url,
+// which is the next most stable identifier the item offers.
+func episodeKey(item feed.Item, enclosure feed.Enclosure) string {
+	if item.Guid != nil && item.Guid.Value != "" {
+		return item.Guid.Value
+	}
+	return enclosure.Url
 }
 
 // episodeFileName derives a safe file name from an enclosure url.
