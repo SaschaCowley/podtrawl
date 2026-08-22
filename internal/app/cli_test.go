@@ -1,6 +1,10 @@
 package app
 
-import "testing"
+import (
+	"testing"
+
+	"ssch.cc/podtrawl/internal/feed"
+)
 
 func TestEpisodeFileName(t *testing.T) {
 	tests := []struct {
@@ -44,5 +48,27 @@ func TestShortHash(t *testing.T) {
 	}
 	if other := shortHash(url + "x"); other == got {
 		t.Errorf("shortHash collided on distinct inputs, both %q", got)
+	}
+}
+
+func TestEpisodeKey(t *testing.T) {
+	const enclosureUrl = "https://cdn.example.com/ep12.mp3"
+	tests := []struct {
+		name string
+		guid *feed.Guid
+		want string
+	}{
+		{"guid", &feed.Guid{Value: "tag:example.com,2026:12"}, "tag:example.com,2026:12"},
+		{"no guid", nil, enclosureUrl},
+		{"empty guid", &feed.Guid{}, enclosureUrl},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			enclosure := feed.Enclosure{Url: enclosureUrl}
+			item := feed.Item{Guid: tt.guid, Enclosures: []feed.Enclosure{enclosure}}
+			if got := episodeKey(item, enclosure); got != tt.want {
+				t.Errorf("episodeKey(%#v, %#v) = %q, want %q", item, enclosure, got, tt.want)
+			}
+		})
 	}
 }

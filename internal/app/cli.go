@@ -56,14 +56,16 @@ func run(ctx context.Context) error {
 				return err
 			}
 			if len(item.Enclosures) != 0 {
-				if cache.Downloaded(feed.Url, item.Guid.Value) {
+				enclosure := item.Enclosures[0]
+				key := episodeKey(item, enclosure)
+				if cache.Downloaded(feed.Url, key) {
 					continue
 				}
-				if err := DownloadEpisode(ctx, feed.Url, rss.Channel.Title, item.Enclosures[0]); err != nil {
-					fmt.Fprintf(os.Stderr, "%s: %v\n", item.Enclosures[0].Url, err)
+				if err := DownloadEpisode(ctx, feed.Url, rss.Channel.Title, enclosure); err != nil {
+					fmt.Fprintf(os.Stderr, "%s: %v\n", enclosure.Url, err)
 					failures++
 				} else {
-					cache.SetDownloaded(feed.Url, item.Guid.Value, true)
+					cache.SetDownloaded(feed.Url, key, true)
 					if err := cache.Save(); err != nil {
 						return err
 					}
@@ -138,6 +140,17 @@ func DownloadEpisode(ctx context.Context, feedUrl, showTitle string, enclosure f
 		fmt.Fprintf(os.Stderr, "download episode: expected %d bytes, got %d\n", enclosure.Length, written)
 	}
 	return nil
+}
+
+// episodeKey identifies an episode within its feed.
+// Guid is optional in RSS and some feeds send it empty,
+// so fall back to the enclosure url,
+// which is the next most stable identifier the item offers.
+func episodeKey(item feed.Item, enclosure feed.Enclosure) string {
+	if item.Guid != nil && item.Guid.Value != "" {
+		return item.Guid.Value
+	}
+	return enclosure.Url
 }
 
 // episodeFileName derives a safe file name from an enclosure url.
