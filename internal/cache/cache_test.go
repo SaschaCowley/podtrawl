@@ -81,7 +81,7 @@ func TestSetDownloaded(t *testing.T) {
 			}
 			cache.SetDownloaded(tt.url, tt.guid, tt.downloaded)
 			if got := cache.Downloaded(tt.url, tt.guid); got != tt.downloaded {
-				t.Errorf("Cache.SetDownloaded(%q, %q, %t(; Cache.downloaded(%[1]q, %q) = %[4]t, want %[3]t", tt.url, tt.guid, tt.downloaded, got)
+				t.Errorf("Cache.SetDownloaded(%q, %q, %t); Cache.Downloaded(%[1]q, %q) = %[4]t, want %[3]t", tt.url, tt.guid, tt.downloaded, got)
 			}
 			if feed != nil {
 				newGuids = feed.Downloaded
