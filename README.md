@@ -10,7 +10,7 @@ Behaviour and configuration are likely to change.
 ## Status
 
 Currently downloads every episode of every configured feed on each run into a directory named after the show.
-Directory and episode names are not sanitised.
+Directory and episode names are sanitised so that they are safe and portable across common file systems.
 
 ## Building
 
@@ -56,7 +56,7 @@ Episodes are written to a directory named after the show title, alongside the ex
 ## Planned work
 
 * [ ] Track which episodes have been downloaded and don't redownload them
-* [ ] Sanitize directory and file names
+* [x] Sanitize directory and file names
 * [ ] Specify the download directory pattern globally, with per-feed overrides
 * [ ] Specify the episode filename pattern globally, with per-feed overrides
 * [ ] Support podcasting namespaces, such as the `itunes` and `podcast` namespaces

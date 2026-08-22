@@ -3,8 +3,10 @@ package app
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path"
@@ -12,6 +14,7 @@ import (
 
 	"ssch.cc/podtrawl/internal/config"
 	"ssch.cc/podtrawl/internal/feed"
+	"ssch.cc/podtrawl/internal/fsname"
 )
 
 func CLI([]string) int {
@@ -47,7 +50,7 @@ func run(ctx context.Context) error {
 				return err
 			}
 			if len(item.Enclosures) != 0 {
-				if err := DownloadEpisode(ctx, rss.Channel.Title, item.Enclosures[0]); err != nil {
+				if err := DownloadEpisode(ctx, feed.Url, rss.Channel.Title, item.Enclosures[0]); err != nil {
 					fmt.Fprintf(os.Stderr, "%s: %v\n", item.Enclosures[0].Url, err)
 					failures++
 				}
@@ -80,7 +83,7 @@ func getFeed(ctx context.Context, url string) (*feed.Rss, error) {
 	return rss, nil
 }
 
-func DownloadEpisode(ctx context.Context, showTitle string, enclosure feed.Enclosure) error {
+func DownloadEpisode(ctx context.Context, feedUrl, showTitle string, enclosure feed.Enclosure) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, enclosure.Url, nil)
 	if err != nil {
 		return err
@@ -97,11 +100,16 @@ func DownloadEpisode(ctx context.Context, showTitle string, enclosure feed.Enclo
 	if err != nil {
 		return err
 	}
-	dirName := filepath.Join(filepath.Dir(exe), showTitle)
+	// The title comes straight from the feed,
+	// so it has to be made safe before it becomes a directory name.
+	// Feeds without a usable title fall back to the feed url,
+	// which is stable across runs.
+	showDir := fsname.ComponentOr(showTitle, "show-"+shortHash(feedUrl))
+	dirName := filepath.Join(filepath.Dir(exe), showDir)
 	if err := os.MkdirAll(dirName, 0755); err != nil {
 		return err
 	}
-	f, err := os.Create(filepath.Join(dirName, path.Base(enclosure.Url)))
+	f, err := os.Create(filepath.Join(dirName, episodeFileName(enclosure.Url)))
 	if err != nil {
 		return err
 	}
@@ -116,4 +124,34 @@ func DownloadEpisode(ctx context.Context, showTitle string, enclosure feed.Enclo
 		fmt.Fprintf(os.Stderr, "download episode: expected %d bytes, got %d\n", enclosure.Length, written)
 	}
 	return nil
+}
+
+// episodeFileName derives a safe file name from an enclosure url.
+// The query string is ignored,
+// as signed urls would otherwise put their whole token in the name.
+// A url that yields nothing usable,
+// such as one ending in a slash,
+// falls back to a hash of the url itself.
+func episodeFileName(rawUrl string) string {
+	var name string
+	if u, err := url.Parse(rawUrl); err == nil {
+		// Path is already percent-decoded.
+		// Base reports an empty path as "."
+		// and a path of nothing but slashes as "/",
+		// neither of which is a name.
+		if base := path.Base(u.Path); base != "." && base != "/" {
+			name = base
+		}
+	}
+	return fsname.ComponentOr(name, "episode-"+shortHash(rawUrl))
+}
+
+// shortHash returns a stable, name-safe digest of s.
+// FNV-1a isn't cryptographic; it is only used here to keep fallback names
+// distinct from one another.
+func shortHash(s string) string {
+	h := fnv.New64a()
+	// Write never returns an error.
+	h.Write([]byte(s))
+	return fmt.Sprintf("%016x", h.Sum64())
 }
