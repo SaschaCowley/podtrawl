@@ -3,6 +3,7 @@ package cache
 import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
 	"io"
 	"io/fs"
 	"os"
@@ -25,13 +26,35 @@ type Cache struct {
 	fd        *os.File
 }
 
-func Open(cacheDir string) (*Cache, error) {
-	var cache Cache
-	f, err := os.OpenFile(filepath.Join(cacheDir, cacheFileName), os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		return nil, err
+func Open(dir *string) (*Cache, error) {
+	var cacheDir string
+	if dir != nil {
+		cacheDir = *dir
+	} else {
+		if dir, err := os.UserCacheDir(); err != nil {
+			return nil, err
+		} else {
+			cacheDir = filepath.Join(dir, "podtrawl")
+		}
 	}
-	cache.fd = f
+	var fname = filepath.Join(cacheDir, cacheFileName)
+	const fmode = os.O_RDWR | os.O_CREATE
+	const fperm = 0644
+	f, err := os.OpenFile(fname, fmode, fperm)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			if err := os.MkdirAll(cacheDir, fperm); err != nil {
+				return nil, err
+			}
+			f, err = os.OpenFile(fname, fmode, fperm)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
+	}
+	cache := Cache{fd: f}
 	if err := json.UnmarshalDecode(jsontext.NewDecoder(f), &cache.cacheFile); err != nil && err != io.EOF {
 		f.Close()
 		return nil, err

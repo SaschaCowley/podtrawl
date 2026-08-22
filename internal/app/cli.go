@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 
+	"ssch.cc/podtrawl/internal/cache"
 	"ssch.cc/podtrawl/internal/config"
 	"ssch.cc/podtrawl/internal/feed"
 	"ssch.cc/podtrawl/internal/fsname"
@@ -32,6 +33,11 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	cache, err := cache.Open(nil)
+	if err != nil {
+		return err
+	}
+	defer cache.Close()
 	// A failing feed or episode shouldn't stop the run,
 	// but it must still be visible in the exit code so a scheduled run can be seen to have failed.
 	var failures int
@@ -50,9 +56,17 @@ func run(ctx context.Context) error {
 				return err
 			}
 			if len(item.Enclosures) != 0 {
+				if cache.Downloaded(feed.Url, item.Guid.Value) {
+					continue
+				}
 				if err := DownloadEpisode(ctx, feed.Url, rss.Channel.Title, item.Enclosures[0]); err != nil {
 					fmt.Fprintf(os.Stderr, "%s: %v\n", item.Enclosures[0].Url, err)
 					failures++
+				} else {
+					cache.SetDownloaded(feed.Url, item.Guid.Value, true)
+					if err := cache.Save(); err != nil {
+						return err
+					}
 				}
 			}
 		}
