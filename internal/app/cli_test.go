@@ -1,6 +1,8 @@
 package app
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"ssch.cc/podtrawl/internal/feed"
@@ -70,5 +72,18 @@ func TestEpisodeKey(t *testing.T) {
 				t.Errorf("episodeKey(%#v, %#v) = %q, want %q", item, enclosure, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestDownloadEpisodeReportsStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "gone", http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	base := t.TempDir()
+	enclosure := feed.Enclosure{Url: srv.URL + "/ep.mp3"}
+	if err := DownloadEpisode(t.Context(), base, enclosure); err == nil {
+		t.Error("DownloadEpisode() with a 404 response returned nil, want an error")
 	}
 }

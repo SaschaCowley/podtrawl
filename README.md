@@ -9,7 +9,8 @@ Behaviour and configuration are likely to change.
 
 ## Status
 
-Currently downloads every episode of every configured feed into a directory named after the show.
+Currently downloads every episode of every configured feed into a directory named after the show,
+under the user's downloads directory.
 Episodes that have already been downloaded are skipped on subsequent runs.
 Directory and episode names are sanitised so that they are safe and portable across common file systems.
 
@@ -51,7 +52,8 @@ url = "https://example.org/another/feed.xml"
 ./bin/podtrawl
 ```
 
-Episodes are written to a directory named after the show title, alongside the executable.
+Episodes are written to a directory named after the show title under `<user downloads dir>/podtrawl/`
+(e.g. `C:\Users\you\Downloads\podtrawl\` on Windows, `~/Downloads/podtrawl/` on Linux and macOS).
 
 ## Download cache
 

@@ -4,6 +4,7 @@ go 1.27.0
 
 require (
 	github.com/BurntSushi/toml v1.6.0
+	github.com/adrg/xdg v0.5.3
 	github.com/magefile/mage v1.17.2
 )
 

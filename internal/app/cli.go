@@ -13,11 +13,16 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/adrg/xdg"
+
 	"ssch.cc/podtrawl/internal/cache"
 	"ssch.cc/podtrawl/internal/config"
 	"ssch.cc/podtrawl/internal/feed"
 	"ssch.cc/podtrawl/internal/fsname"
 )
+
+const dperm = 0755
+const appDirName string = "podtrawl"
 
 func CLI([]string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -38,6 +43,10 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	root, err := downloadRoot()
+	if err != nil {
+		return err
+	}
 	// A failing feed or episode shouldn't stop the run,
 	// but it must still be visible in the exit code so a scheduled run can be seen to have failed.
 	var failures int
@@ -51,6 +60,15 @@ func run(ctx context.Context) error {
 			failures++
 			continue
 		}
+		if len(rss.Channel.Items) == 0 {
+			continue
+		}
+		// The title comes straight from the feed,
+		// so it has to be made safe before it becomes a directory name.
+		// Feeds without a usable title fall back to the feed url,
+		// which is stable across runs.
+		showDir := fsname.ComponentOr(rss.Channel.Title, "show-"+shortHash(feed.Url))
+		dirName := filepath.Join(root, showDir)
 		for _, item := range rss.Channel.Items {
 			if err := ctx.Err(); err != nil {
 				return err
@@ -61,7 +79,7 @@ func run(ctx context.Context) error {
 				if cache.Downloaded(feed.Url, key) {
 					continue
 				}
-				if err := DownloadEpisode(ctx, feed.Url, rss.Channel.Title, enclosure); err != nil {
+				if err := DownloadEpisode(ctx, dirName, enclosure); err != nil {
 					fmt.Fprintf(os.Stderr, "%s: %v\n", enclosure.Url, err)
 					failures++
 				} else {
@@ -117,7 +135,8 @@ func getFeed(ctx context.Context, url string) (*feed.Rss, error) {
 	return rss, nil
 }
 
-func DownloadEpisode(ctx context.Context, feedUrl, showTitle string, enclosure feed.Enclosure) error {
+// DownloadEpisode writes an episode to <dirName>/<episode>.
+func DownloadEpisode(ctx context.Context, dirName string, enclosure feed.Enclosure) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, enclosure.Url, nil)
 	if err != nil {
 		return err
@@ -130,17 +149,7 @@ func DownloadEpisode(ctx context.Context, feedUrl, showTitle string, enclosure f
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download episode: %s", resp.Status)
 	}
-	exe, err := os.Executable()
-	if err != nil {
-		return err
-	}
-	// The title comes straight from the feed,
-	// so it has to be made safe before it becomes a directory name.
-	// Feeds without a usable title fall back to the feed url,
-	// which is stable across runs.
-	showDir := fsname.ComponentOr(showTitle, "show-"+shortHash(feedUrl))
-	dirName := filepath.Join(filepath.Dir(exe), showDir)
-	if err := os.MkdirAll(dirName, 0755); err != nil {
+	if err := os.MkdirAll(dirName, dperm); err != nil {
 		return err
 	}
 	f, err := os.Create(filepath.Join(dirName, episodeFileName(enclosure.Url)))
@@ -199,4 +208,16 @@ func shortHash(s string) string {
 	// Write never returns an error.
 	h.Write([]byte(s))
 	return fmt.Sprintf("%016x", h.Sum64())
+}
+
+// downloadRoot is the directory episodes are stored under.
+// Uses Known Folders  on Windows
+// and XDG user directories on Unix-like systems,
+// falling back to a sensible, platform-dependent default if those fail.
+// If even the fallback fails, the zero string and an error are returned.
+func downloadRoot() (string, error) {
+	if xdg.UserDirs.Download == "" {
+		return "", errors.New("unable to determine downloads directory")
+	}
+	return filepath.Join(xdg.UserDirs.Download, appDirName), nil
 }
