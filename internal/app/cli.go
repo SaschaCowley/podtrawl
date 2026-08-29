@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,8 +15,10 @@ import (
 	"path/filepath"
 
 	"github.com/adrg/xdg"
+	"github.com/spf13/pflag"
 
 	"ssch.cc/podtrawl/internal/cache"
+	"ssch.cc/podtrawl/internal/clilog"
 	"ssch.cc/podtrawl/internal/config"
 	"ssch.cc/podtrawl/internal/feed"
 	"ssch.cc/podtrawl/internal/fsname"
@@ -24,22 +27,31 @@ import (
 const dperm = 0755
 const appDirName string = "podtrawl"
 
-func CLI([]string) int {
+func CLI(args []string) int {
+	f := flags{}
+	if err := f.parse(args); err != nil {
+		if errors.Is(err, pflag.ErrHelp) {
+			return 0
+		}
+		fmt.Fprint(os.Stderr, err)
+		return 2
+	}
+	log := newLogger(f.verbosity, f.json)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	if err := run(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	if err := run(ctx, log); err != nil {
+		log.Error(err.Error())
 		return 1
 	}
 	return 0
 }
 
-func run(ctx context.Context) error {
-	conf, err := config.Get(nil)
+func run(ctx context.Context, log *slog.Logger) error {
+	conf, err := config.Get(nil, log)
 	if err != nil {
 		return err
 	}
-	cache, err := newCache()
+	cache, err := newCache(log)
 	if err != nil {
 		return err
 	}
@@ -47,19 +59,24 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	log.Debug("download root", "dir", root)
 	// A failing feed or episode shouldn't stop the run,
 	// but it must still be visible in the exit code so a scheduled run can be seen to have failed.
 	var failures int
-	for _, feed := range conf.Feeds {
+	for _, f := range conf.Feeds {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		rss, err := getFeed(ctx, feed.Url)
+		// Every message about this feed carries its url,
+		// so the messages below don't have to repeat it.
+		fLog := log.With("feed", f.Url)
+		rss, err := getFeed(ctx, f.Url)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %v\n", feed.Url, err)
+			fLog.Error("fetch feed", "err", err)
 			failures++
 			continue
 		}
+		fLog.Debug("fetched feed", "title", rss.Channel.Title, "items", len(rss.Channel.Items))
 		if len(rss.Channel.Items) == 0 {
 			continue
 		}
@@ -67,30 +84,34 @@ func run(ctx context.Context) error {
 		// so it has to be made safe before it becomes a directory name.
 		// Feeds without a usable title fall back to the feed url,
 		// which is stable across runs.
-		showDir := fsname.ComponentOr(rss.Channel.Title, "show-"+shortHash(feed.Url))
+		showDir := fsname.ComponentOr(rss.Channel.Title, "show-"+shortHash(f.Url))
 		dirName := filepath.Join(root, showDir)
+		fLog.Debug("show directory", "dir", dirName)
 		for _, item := range rss.Channel.Items {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			if len(item.Enclosures) != 0 {
-				enclosure := item.Enclosures[0]
-				key := episodeKey(item, enclosure)
-				if cache.Downloaded(feed.Url, key) {
-					continue
-				}
-				if err := DownloadEpisode(ctx, dirName, enclosure); err != nil {
-					fmt.Fprintf(os.Stderr, "%s: %v\n", enclosure.Url, err)
-					failures++
-				} else {
-					cache.SetDownloaded(feed.Url, key, true)
-					// An unsaved cache means we might have to do more work later,
-					// but shouldn't mean we abandon all the remaining downloads.
-					if err := cache.Save(); err != nil {
-						fmt.Fprintf(os.Stderr, "%s: %v\n", enclosure.Url, err)
-						failures++
-					}
-				}
+			if len(item.Enclosures) == 0 {
+				fLog.Debug("item has no enclosure", "item", itemTitle(item))
+				continue
+			}
+			enclosure := item.Enclosures[0]
+			key := episodeKey(item, enclosure)
+			if cache.Downloaded(f.Url, key) {
+				fLog.Debug("already downloaded", "episode", key)
+				continue
+			}
+			if err := DownloadEpisode(ctx, log, dirName, enclosure); err != nil {
+				fLog.Error("download episode", "url", enclosure.Url, "err", err)
+				failures++
+				continue
+			}
+			cache.SetDownloaded(f.Url, key, true)
+			// An unsaved cache means we might have to do more work later,
+			// but shouldn't mean we abandon all the remaining downloads.
+			if err := cache.Save(); err != nil {
+				fLog.Error("save cache", "url", enclosure.Url, "err", err)
+				failures++
 			}
 		}
 	}
@@ -104,13 +125,13 @@ func run(ctx context.Context) error {
 // reporting a cache that could not be read only as a warning.
 // Starting from an empty cache costs a re-download;
 // stopping here would cost the whole run.
-func newCache() (*cache.Cache, error) {
+func newCache(logger *slog.Logger) (*cache.Cache, error) {
 	c, err := cache.New(nil)
 	if err != nil {
 		if !errors.Is(err, cache.ErrCorrupt) {
 			return nil, err
 		}
-		fmt.Fprintln(os.Stderr, err)
+		logger.Warn("cache unreadable, starting cold", "err", err)
 	}
 	return c, nil
 }
@@ -136,7 +157,9 @@ func getFeed(ctx context.Context, url string) (*feed.Rss, error) {
 }
 
 // DownloadEpisode writes an episode to <dirName>/<episode>.
-func DownloadEpisode(ctx context.Context, dirName string, enclosure feed.Enclosure) error {
+func DownloadEpisode(ctx context.Context, log *slog.Logger, dirName string, enclosure feed.Enclosure) error {
+	log.Debug("fetching episode",
+		"url", enclosure.Url, "length", enclosure.Length, "type", enclosure.Type)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, enclosure.Url, nil)
 	if err != nil {
 		return err
@@ -152,7 +175,8 @@ func DownloadEpisode(ctx context.Context, dirName string, enclosure feed.Enclosu
 	if err := os.MkdirAll(dirName, dperm); err != nil {
 		return err
 	}
-	f, err := os.Create(filepath.Join(dirName, episodeFileName(enclosure.Url)))
+	path := filepath.Join(dirName, episodeFileName(enclosure.Url))
+	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
@@ -164,9 +188,20 @@ func DownloadEpisode(ctx context.Context, dirName string, enclosure feed.Enclosu
 	// Length is required by the RSS spec but is frequently absent or wrong,
 	// so only check it when the feed gives us something to check against.
 	if enclosure.Length > 0 && written != enclosure.Length {
-		fmt.Fprintf(os.Stderr, "download episode: expected %d bytes, got %d\n", enclosure.Length, written)
+		log.Warn("unexpected episode size", "file", path, "expected", enclosure.Length, "actual", written)
 	}
+	log.Info("downloaded episode", "file", path)
 	return nil
+}
+
+// itemTitle names an item for a message.
+// Title is optional in RSS,
+// and an item without one is exactly the sort of item worth mentioning.
+func itemTitle(item feed.Item) string {
+	if item.Title != nil && *item.Title != "" {
+		return *item.Title
+	}
+	return "(untitled)"
 }
 
 // episodeKey identifies an episode within its feed.
@@ -220,4 +255,33 @@ func downloadRoot() (string, error) {
 		return "", errors.New("unable to determine downloads directory")
 	}
 	return filepath.Join(xdg.UserDirs.Download, appDirName), nil
+}
+
+// newLogger creates a new logger.
+//
+// If json is true, the logger will use slog.JSONHandler;
+// otherwise, it will use clilog.Handler.
+//
+// Verbosity ranges from -1 to 2, inclusive, for
+// slog.LevelDebug, slog.LevelWarn, slog.LevelError, slog.LevelError+1, respectively.
+// Values outside of this range are clamped.
+func newLogger(verbosity int, json bool) *slog.Logger {
+	var level slog.Level
+	switch min(max(verbosity, -1), 2) {
+	case -1:
+		level = slog.LevelDebug
+	case 0:
+		level = slog.LevelWarn
+	case 1:
+		level = slog.LevelError
+	case 2:
+		level = slog.LevelError + slog.Level(1)
+	}
+	var handler slog.Handler
+	if json {
+		handler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level})
+	} else {
+		handler = clilog.NewHandler(os.Stderr, level)
+	}
+	return slog.New(handler)
 }

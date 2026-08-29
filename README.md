@@ -2,7 +2,8 @@
 
 A small podcast downloader written in Go.
 It reads a list of RSS feeds from a config file and downloads the episode enclosures it finds.
-The intention is to be able to automate downloading podcast episodes using cron or similar.
+The intention is to be easy to work with from the command line,
+while also supporting scheduled downloads using cron or similar.
 
 Podtrawl is in early development.
 Behaviour and configuration are likely to change.
@@ -49,11 +50,21 @@ url = "https://example.org/another/feed.xml"
 ## Running
 
 ```sh
-./bin/podtrawl
+./bin/podtrawl [-q|-v] [--json]
 ```
 
 Episodes are written to a directory named after the show title under `<user downloads dir>/podtrawl/`
 (e.g. `C:\Users\you\Downloads\podtrawl\` on Windows, `~/Downloads/podtrawl/` on Linux and macOS).
+
+Currently, all output is log output, and is written to standard error.
+The default verbosity shows errors and warnings.
+The output verbosity can be changed with the `-v, --verbose` or `-q, --quiet` flags:
+
+* `-v`: Set log level to debug
+* `-q`: Set log level to error
+* `-qq`: set log level to above error.
+
+The `--json`` flag may be passed to emit logs as line-delimited JSON.
 
 ## Download cache
 
@@ -66,13 +77,15 @@ Episodes are identified by their feed's URL together with the item's "`guid`",
 falling back to the enclosure URL for the feeds that omit it.
 
 Deleting the file makes the next run download every episode again.
-An unreadable cache is reported on standard error,
+An unreadable cache is logged at level warn,
 treated as empty, and replaced by the next successful download.
 
 ## Exit status
 
-podtrawl exits 0 when every feed and episode was handled successfully, and 1 otherwise.
-Errors fetching feeds, downloading episodes, or updating the cache are reported on standard error,
+podtrawl exits 0 when every feed and episode was handled successfully,
+2 if there were issues with the arguments passed at the CLI,
+and 1 otherwise.
+Errors fetching feeds, downloading episodes, or updating the cache are logged,
 but do not stop processing.
 If such errors have occured in a run, podtrawl exits 1.
 

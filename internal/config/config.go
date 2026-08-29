@@ -2,8 +2,7 @@ package config
 
 import (
 	"errors"
-	"fmt"
-
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -31,37 +30,41 @@ func load(path string) (*Config, error) {
 
 var ErrLoad = errors.New("unable to load config")
 
-func Get(path *string) (*Config, error) {
+// Get finds and loads the config file.
+func Get(path *string, log *slog.Logger) (*Config, error) {
+	errs := []error{ErrLoad}
+	// try loads one candidate, recording it if it doesn't work out.
+	try := func(configPath string) *Config {
+		config, err := load(configPath)
+		if err != nil {
+			log.Debug("config not loaded", "path", configPath, "err", err)
+			errs = append(errs, err)
+			return nil
+		}
+		log.Debug("config loaded", "path", configPath, "feeds", len(config.Feeds))
+		return config
+	}
 	if path != nil {
 		// Explicit path; only ever use it
-		if config, err := load(*path); err != nil {
-			fmt.Println(err)
-		} else {
+		if config := try(*path); config != nil {
 			return config, nil
 		}
 	} else {
 		// Try loading the config from the user's config directory
 		if ucd, err := os.UserConfigDir(); err != nil {
-			fmt.Println(err)
-		} else {
-			configPath := filepath.Join(ucd, appDirName, configFileName)
-			if config, err := load(configPath); err != nil {
-				fmt.Println(err)
-			} else {
-				return config, nil
-			}
+			log.Debug("no user config directory", "err", err)
+			errs = append(errs, err)
+		} else if config := try(filepath.Join(ucd, appDirName, configFileName)); config != nil {
+			return config, nil
 		}
 		// Try loading the config file from next to the executable
 		if executable, err := os.Executable(); err != nil {
-			fmt.Println(err)
-		} else {
-			configPath := filepath.Join(filepath.Dir(executable), configFileName)
-			if config, err := load(configPath); err != nil {
-				fmt.Println(err)
-			} else {
-				return config, nil
-			}
+			log.Debug("no executable path", "err", err)
+			errs = append(errs, err)
+		} else if config := try(filepath.Join(filepath.Dir(executable), configFileName)); config != nil {
+			return config, nil
 		}
 	}
-	return nil, ErrLoad
+	// Joined rather than summarised, so that ErrLoad and every cause stay inspectable.
+	return nil, errors.Join(errs...)
 }

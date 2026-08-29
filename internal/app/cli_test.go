@@ -1,6 +1,7 @@
 package app
 
 import (
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -83,7 +84,7 @@ func TestDownloadEpisodeReportsStatus(t *testing.T) {
 
 	base := t.TempDir()
 	enclosure := feed.Enclosure{Url: srv.URL + "/ep.mp3"}
-	if err := DownloadEpisode(t.Context(), base, enclosure); err == nil {
+	if err := DownloadEpisode(t.Context(), slog.Default(), base, enclosure); err == nil {
 		t.Error("DownloadEpisode() with a 404 response returned nil, want an error")
 	}
 }
