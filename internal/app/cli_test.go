@@ -1,9 +1,12 @@
 package app
 
 import (
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"ssch.cc/podtrawl/internal/feed"
@@ -77,14 +80,40 @@ func TestEpisodeKey(t *testing.T) {
 }
 
 func TestDownloadEpisodeReportsStatus(t *testing.T) {
+	const name = "ep.mp3"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "gone", http.StatusNotFound)
 	}))
 	defer srv.Close()
 
 	base := t.TempDir()
-	enclosure := feed.Enclosure{Url: srv.URL + "/ep.mp3"}
-	if err := DownloadEpisode(t.Context(), slog.Default(), base, enclosure); err == nil {
+	enclosure := feed.Enclosure{Url: srv.URL + "/" + name}
+	if err := DownloadEpisode(t.Context(), slog.Default(), filepath.Join(base, name), enclosure); err == nil {
 		t.Error("DownloadEpisode() with a 404 response returned nil, want an error")
+	}
+}
+
+func TestDownloadEpisodeWritesToDest(t *testing.T) {
+	const name = "ep.mp3"
+	const body = "audio"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, body)
+	}))
+	defer srv.Close()
+
+	// Using a nested dest ensures that
+	// DownloadEpisode properly handles being given a complete path,
+	// rather than one without the filename.
+	dest := filepath.Join(t.TempDir(), "Show", "2026", name)
+	enclosure := feed.Enclosure{Url: srv.URL + "/" + name}
+	if err := DownloadEpisode(t.Context(), slog.Default(), dest, enclosure); err != nil {
+		t.Fatalf("DownloadEpisode() = %v, want nil", err)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("DownloadEpisode() did not write to %q: %v", dest, err)
+	}
+	if string(got) != body {
+		t.Errorf("contents of %q = %q, want %q", dest, got, body)
 	}
 }

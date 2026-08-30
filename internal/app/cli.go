@@ -101,7 +101,8 @@ func run(ctx context.Context, log *slog.Logger) error {
 				fLog.Debug("already downloaded", "episode", key)
 				continue
 			}
-			if err := DownloadEpisode(ctx, log, dirName, enclosure); err != nil {
+			dest := filepath.Join(dirName, episodeFileName(enclosure.Url))
+			if err := DownloadEpisode(ctx, fLog, dest, enclosure); err != nil {
 				fLog.Error("download episode", "url", enclosure.Url, "err", err)
 				failures++
 				continue
@@ -156,8 +157,8 @@ func getFeed(ctx context.Context, url string) (*feed.Rss, error) {
 	return rss, nil
 }
 
-// DownloadEpisode writes an episode to <dirName>/<episode>.
-func DownloadEpisode(ctx context.Context, log *slog.Logger, dirName string, enclosure feed.Enclosure) error {
+// DownloadEpisode writes an episode to dest.
+func DownloadEpisode(ctx context.Context, log *slog.Logger, dest string, enclosure feed.Enclosure) error {
 	log.Debug("fetching episode",
 		"url", enclosure.Url, "length", enclosure.Length, "type", enclosure.Type)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, enclosure.Url, nil)
@@ -172,11 +173,10 @@ func DownloadEpisode(ctx context.Context, log *slog.Logger, dirName string, encl
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download episode: %s", resp.Status)
 	}
-	if err := os.MkdirAll(dirName, dperm); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dest), dperm); err != nil {
 		return err
 	}
-	path := filepath.Join(dirName, episodeFileName(enclosure.Url))
-	f, err := os.Create(path)
+	f, err := os.Create(dest)
 	if err != nil {
 		return err
 	}
@@ -188,9 +188,9 @@ func DownloadEpisode(ctx context.Context, log *slog.Logger, dirName string, encl
 	// Length is required by the RSS spec but is frequently absent or wrong,
 	// so only check it when the feed gives us something to check against.
 	if enclosure.Length > 0 && written != enclosure.Length {
-		log.Warn("unexpected episode size", "file", path, "expected", enclosure.Length, "actual", written)
+		log.Warn("unexpected episode size", "file", dest, "expected", enclosure.Length, "actual", written)
 	}
-	log.Info("downloaded episode", "file", path)
+	log.Info("downloaded episode", "file", dest)
 	return nil
 }
 
