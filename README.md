@@ -98,3 +98,5 @@ If such errors have occured in a run, podtrawl exits 1.
 * [ ] Support podcasting namespaces, such as the `itunes` and `podcast` namespaces
 * [ ] Cache feed files and responses (`etag`, `ttl` etc), and respect feed properties (`ttl`, `skipDays`, `skipHours` etc)
 * [ ] (Optionally) parallelize downloads across multiple threads
+* [ ] Import and export subscriptions to/from OPML
+* [ ] Interactive configuration and cache management
