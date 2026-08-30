@@ -28,8 +28,8 @@ const dperm = 0755
 const appDirName string = "podtrawl"
 
 func CLI(args []string) int {
-	f := flags{}
-	if err := f.parse(args); err != nil {
+	f, err := parseArgs(args)
+	if err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
 			return 0
 		}
@@ -39,17 +39,22 @@ func CLI(args []string) int {
 	log := newLogger(f.verbosity, f.json)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	if err := run(ctx, log); err != nil {
+	if err := run(ctx, log, f); err != nil {
 		log.Error(err.Error())
 		return 1
 	}
 	return 0
 }
 
-func run(ctx context.Context, log *slog.Logger) error {
-	conf, err := config.Get(nil, log)
+// run downloads every new episode of every configured feed.
+func run(ctx context.Context, log *slog.Logger, opts *flags) error {
+	conf, err := config.Get(opts.configPath, log)
 	if err != nil {
 		return err
+	}
+	if len(conf.Feeds) == 0 {
+		log.Warn("config has no feeds")
+		return nil
 	}
 	cache, err := newCache(log)
 	if err != nil {
@@ -78,6 +83,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 		}
 		fLog.Debug("fetched feed", "title", rss.Channel.Title, "items", len(rss.Channel.Items))
 		if len(rss.Channel.Items) == 0 {
+			fLog.Debug("channel has no items")
 			continue
 		}
 		// The title comes straight from the feed,
@@ -92,16 +98,25 @@ func run(ctx context.Context, log *slog.Logger) error {
 				return err
 			}
 			if len(item.Enclosures) == 0 {
-				fLog.Debug("item has no enclosure", "item", itemTitle(item))
+				fLog.Debug("item has no enclosures", "item", itemTitle(item))
 				continue
 			}
 			enclosure := item.Enclosures[0]
 			key := episodeKey(item, enclosure)
-			if cache.Downloaded(f.Url, key) {
+			cached := cache.Downloaded(f.Url, key)
+			if cached && !opts.dryRun {
 				fLog.Debug("already downloaded", "episode", key)
 				continue
 			}
 			dest := filepath.Join(dirName, episodeFileName(enclosure.Url))
+			if opts.dryRun {
+				status := "download"
+				if cached {
+					status = "cached"
+				}
+				fmt.Printf("%-8s  %s\n", status, dest)
+				continue
+			}
 			if err := DownloadEpisode(ctx, fLog, dest, enclosure); err != nil {
 				fLog.Error("download episode", "url", enclosure.Url, "err", err)
 				failures++

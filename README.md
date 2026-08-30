@@ -37,6 +37,8 @@ podtrawl looks for `config.toml` in the following locations, in order:
 
 The first file that loads successfully is the config that is used; there is currently no configuration inheritance.
 
+Passing `-c, --config <path>` uses that file instead, and the locations above are not searched.
+
 The file lists one `[[feed]]` table per podcast:
 
 ```toml
@@ -50,13 +52,13 @@ url = "https://example.org/another/feed.xml"
 ## Running
 
 ```sh
-./bin/podtrawl [-q|-v] [--json]
+./bin/podtrawl [-c <path>] [-n] [-q|-v] [--json]
 ```
 
 Episodes are written to a directory named after the show title under `<user downloads dir>/podtrawl/`
 (e.g. `C:\Users\you\Downloads\podtrawl\` on Windows, `~/Downloads/podtrawl/` on Linux and macOS).
 
-Currently, all output is log output, and is written to standard error.
+Log output is written to standard error.
 The default verbosity shows errors and warnings.
 The output verbosity can be changed with the `-v, --verbose` or `-q, --quiet` flags:
 
@@ -64,7 +66,23 @@ The output verbosity can be changed with the `-v, --verbose` or `-q, --quiet` fl
 * `-q`: Set log level to error
 * `-qq`: set log level to above error.
 
-The `--json`` flag may be passed to emit logs as line-delimited JSON.
+The `--json` flag may be passed to emit logs as line-delimited JSON.
+
+Report output, such as that produced by `--dry-run`, is written to standard output.
+It is not affected by the `--verbose` or `--quiet` arguments.
+
+## Dry run
+
+`-n, --dry-run` reports what a run would do, without downloading any episodes or modifying the cache.
+Feeds are still fetched.
+
+Every episode is listed with where it would be written,
+and whether the cache already accounts for it:
+
+```
+download  /home/you/Downloads/podtrawl/Test Podcast/episode2-644.mp3
+cached    /home/you/Downloads/podtrawl/Test Podcast/episode1-440.mp3
+```
 
 ## Download cache
 
