@@ -17,7 +17,8 @@ type Feed struct {
 }
 
 type Config struct {
-	Feeds []Feed `toml:"feed"`
+	Root  *string `toml:"root"`
+	Feeds []Feed  `toml:"feed"`
 }
 
 func load(path string) (*Config, error) {

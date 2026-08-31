@@ -7,10 +7,72 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
+	"ssch.cc/podtrawl/internal/config"
 	"ssch.cc/podtrawl/internal/feed"
 )
+
+func TestRootDir(t *testing.T) {
+	type testCase struct {
+		name    string
+		root    string
+		want    string
+		wantErr bool
+	}
+	abs := t.TempDir()
+	tests := []testCase{
+		{name: "absolute path", root: abs, want: abs},
+		{name: "parent is resolved", root: abs + "/sub/..", want: abs},
+		{name: "current is resolved", root: abs + "/./", want: abs},
+		{name: "empty", root: "", wantErr: true},
+		{name: "relative", root: "podcasts", wantErr: true},
+		{name: "working directory", root: ".", wantErr: true},
+		{name: "tilde is not expanded", root: "~/Podcasts", wantErr: true},
+	}
+	if runtime.GOOS == "windows" {
+		// Local absolute paths on Windows start with a volume.
+		tests = append(tests, testCase{name: "unix-style path", root: "/podcasts", wantErr: true})
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := rootDir(&config.Config{Root: &tt.root})
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("rootDir(root=%q) = %q, nil, want an error", tt.root, got)
+				}
+				if got != "" {
+					t.Errorf("rootDir(root=%q) = %q alongside an error, want an empty string", tt.root, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("rootDir(root=%q) = _, %v, want nil", tt.root, err)
+			}
+			if !filepath.IsAbs(got) {
+				t.Errorf("rootDir(root=%q) = %q, want an absolute path", tt.root, got)
+			}
+			if got != tt.want {
+				t.Errorf("rootDir(root=%q) = %q, want %q", tt.root, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRootDirUnset(t *testing.T) {
+	want, err := downloadRoot()
+	if err != nil {
+		t.Skipf("no downloads directory on this system: %v", err)
+	}
+	got, err := rootDir(&config.Config{})
+	if err != nil {
+		t.Fatalf("rootDir(root unset) = _, %v, want nil", err)
+	}
+	if got != want {
+		t.Errorf("rootDir(root unset) = %q, want %q", got, want)
+	}
+}
 
 func TestEpisodeFileName(t *testing.T) {
 	tests := []struct {

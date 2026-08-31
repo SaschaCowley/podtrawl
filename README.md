@@ -49,14 +49,33 @@ url = "https://example.com/podcast.rss"
 url = "https://example.org/another/feed.xml"
 ```
 
+### `root`
+
+The optional `root` key sets the directory that show directories are created under.
+If not set, `<user downloads dir>/podtrawl/` is used
+(e.g. `C:\Users\you\Downloads\podtrawl\` on Windows, `~/Downloads/podtrawl/` on Linux and macOS).
+`root` must be declared before any feeds.
+
+```toml
+root = "D:/Podcasts"
+
+[[feed]]
+url = "https://example.com/podcast.rss"
+```
+
+`root` must be an absolute path;
+setting it to a relative path is an error.
+No variable or tilde expansion is performed.
+Slashes are accepted as path seperater on Windows.
+
 ## Running
 
 ```sh
 ./bin/podtrawl [-c <path>] [-n] [-q|-v] [--json]
 ```
 
-Episodes are written to a directory named after the show title under `<user downloads dir>/podtrawl/`
-(e.g. `C:\Users\you\Downloads\podtrawl\` on Windows, `~/Downloads/podtrawl/` on Linux and macOS).
+Episodes are written to a directory named after the show title,
+under the download [`root`](#root) directory.
 
 Log output is written to standard error.
 The default verbosity shows errors and warnings.

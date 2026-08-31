@@ -60,7 +60,7 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) error {
 	if err != nil {
 		return err
 	}
-	root, err := downloadRoot()
+	root, err := rootDir(conf)
 	if err != nil {
 		return err
 	}
@@ -299,4 +299,19 @@ func newLogger(verbosity int, json bool) *slog.Logger {
 		handler = clilog.NewHandler(os.Stderr, level)
 	}
 	return slog.New(handler)
+}
+
+// rootDir gets the download root directory.
+// If specified in config, `root` is used;
+// otherwise, `podtrawl` in the user download directory is used.
+// An error is returned if a root is provided and is not absolute.
+// The root is simplified prior to being returned.
+func rootDir(conf *config.Config) (string, error) {
+	if conf.Root == nil {
+		return downloadRoot()
+	}
+	if !filepath.IsAbs(*conf.Root) {
+		return "", fmt.Errorf("config: root must be absolute, got %q", *conf.Root)
+	}
+	return filepath.Clean(*conf.Root), nil
 }
