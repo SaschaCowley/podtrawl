@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"io"
 	"log/slog"
 	"net/http"
@@ -22,6 +21,7 @@ import (
 	"ssch.cc/podtrawl/internal/config"
 	"ssch.cc/podtrawl/internal/feed"
 	"ssch.cc/podtrawl/internal/fsname"
+	"ssch.cc/podtrawl/internal/naming"
 )
 
 const dperm = 0755
@@ -90,7 +90,7 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) error {
 		// so it has to be made safe before it becomes a directory name.
 		// Feeds without a usable title fall back to the feed url,
 		// which is stable across runs.
-		showDir := fsname.ComponentOr(rss.Channel.Title, "show-"+shortHash(f.Url))
+		showDir := fsname.ComponentOr(rss.Channel.Title, "show-"+naming.ShortHash(f.Url))
 		dirName := filepath.Join(root, showDir)
 		fLog.Debug("show directory", "dir", dirName)
 		for _, item := range rss.Channel.Items {
@@ -247,17 +247,7 @@ func episodeFileName(rawUrl string) string {
 			name = base
 		}
 	}
-	return fsname.ComponentOr(name, "episode-"+shortHash(rawUrl))
-}
-
-// shortHash returns a stable, name-safe digest of s.
-// FNV-1a isn't cryptographic; it is only used here to keep fallback names
-// distinct from one another.
-func shortHash(s string) string {
-	h := fnv.New64a()
-	// Write never returns an error.
-	h.Write([]byte(s))
-	return fmt.Sprintf("%016x", h.Sum64())
+	return fsname.ComponentOr(name, "episode-"+naming.ShortHash(rawUrl))
 }
 
 // downloadRoot is the directory episodes are stored under.

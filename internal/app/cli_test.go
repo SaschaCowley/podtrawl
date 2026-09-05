@@ -12,6 +12,7 @@ import (
 
 	"ssch.cc/podtrawl/internal/config"
 	"ssch.cc/podtrawl/internal/feed"
+	"ssch.cc/podtrawl/internal/naming"
 )
 
 func TestRootDir(t *testing.T) {
@@ -88,12 +89,12 @@ func TestEpisodeFileName(t *testing.T) {
 		{
 			"no path to use",
 			"https://cdn.example.com/",
-			"episode-" + shortHash("https://cdn.example.com/"),
+			"episode-" + naming.ShortHash("https://cdn.example.com/"),
 		},
 		{
 			"unparseable url",
 			"://not a url",
-			"episode-" + shortHash("://not a url"),
+			"episode-" + naming.ShortHash("://not a url"),
 		},
 	}
 	for _, tt := range tests {
@@ -102,20 +103,6 @@ func TestEpisodeFileName(t *testing.T) {
 				t.Errorf("episodeFileName(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
-	}
-}
-
-func TestShortHash(t *testing.T) {
-	const url = "https://example.com/feed.xml"
-	got := shortHash(url)
-	if len(got) != 16 {
-		t.Errorf("shortHash(%q) = %q, want 16 characters", url, got)
-	}
-	if again := shortHash(url); again != got {
-		t.Errorf("shortHash(%q) = %q on a second call, want %q", url, again, got)
-	}
-	if other := shortHash(url + "x"); other == got {
-		t.Errorf("shortHash collided on distinct inputs, both %q", got)
 	}
 }
 
