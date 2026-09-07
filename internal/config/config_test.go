@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"testing"
 )
 
@@ -204,5 +205,103 @@ func TestGetReportsEveryFailure(t *testing.T) {
 	}
 	if !errors.Is(err, ErrLoad) {
 		t.Errorf("Get(nil) = _, %v, want an error wrapping ErrLoad", err)
+	}
+}
+
+// str returns a string representation of a string pointer.
+func str(s *string) string {
+	if s == nil {
+		return "<nil>"
+	}
+	return strconv.Quote(*s)
+}
+
+func TestLoadEmbeddedFeedSettings(t *testing.T) {
+	const content = `
+[[feed]]
+url = "https://example.com/podcast.rss"
+dirname = "{{.Feed.Title}}"
+filename = "{{.Episode.Filename}}"
+sanitize = false
+`
+	c, err := load(writeConfig(t, t.TempDir(), content))
+	if err != nil {
+		t.Fatalf("load() = _, %v, want nil", err)
+	}
+	if len(c.Feeds) != 1 {
+		t.Fatalf("load() gave %d feeds, want 1", len(c.Feeds))
+	}
+	f := c.Feeds[0]
+	if f.Dirname == nil || *f.Dirname != "{{.Feed.Title}}" {
+		t.Errorf("Feeds[0].Dirname = %s, want %q", str(f.Dirname), "{{.Feed.Title}}")
+	}
+	if f.Filename == nil || *f.Filename != "{{.Episode.Filename}}" {
+		t.Errorf("Feeds[0].Filename = %s, want %q", str(f.Filename), "{{.Episode.Filename}}")
+	}
+	if f.Sanitize == nil || *f.Sanitize {
+		t.Errorf("Feeds[0].Sanitize = %v, want false", f.Sanitize)
+	}
+}
+
+func TestLoadDefaults(t *testing.T) {
+	const content = `
+[defaults]
+dirname = "{{.Feed.Title}}"
+sanitize = true
+
+[[feed]]
+url = "https://example.com/podcast.rss"
+`
+	c, err := load(writeConfig(t, t.TempDir(), content))
+	if err != nil {
+		t.Fatalf("load() = _, %v, want nil", err)
+	}
+	if c.Defaults.Dirname == nil || *c.Defaults.Dirname != "{{.Feed.Title}}" {
+		t.Errorf("Defaults.Dirname = %s, want %q", str(c.Defaults.Dirname), "{{.Feed.Title}}")
+	}
+	if c.Defaults.Sanitize == nil || !*c.Defaults.Sanitize {
+		t.Errorf("Defaults.Sanitize = %v, want true", c.Defaults.Sanitize)
+	}
+	if c.Defaults.Filename != nil {
+		t.Errorf("Defaults.Filename = %s, want nil", str(c.Defaults.Filename))
+	}
+	if f := c.Feeds[0]; f.Dirname != nil || f.Filename != nil || f.Sanitize != nil {
+		t.Errorf("a feed with no overrides gave dirname %s, filename %s, sanitize %v, want all nil",
+			str(f.Dirname), str(f.Filename), f.Sanitize)
+	}
+}
+
+func TestLoadEmptyTemplateIsNotUnset(t *testing.T) {
+	const content = `
+[defaults]
+dirname = ""
+
+[[feed]]
+url = "https://example.com/podcast.rss"
+filename = ""
+`
+	c, err := load(writeConfig(t, t.TempDir(), content))
+	if err != nil {
+		t.Fatalf("load() = _, %v, want nil", err)
+	}
+	if c.Defaults.Dirname == nil || *c.Defaults.Dirname != "" {
+		t.Errorf("Defaults.Dirname = %s, want the empty string", str(c.Defaults.Dirname))
+	}
+	if f := c.Feeds[0]; f.Filename == nil || *f.Filename != "" {
+		t.Errorf("Feeds[0].Filename = %s, want the empty string", str(f.Filename))
+	}
+}
+
+func TestLoadRejectsDuplicateFeeds(t *testing.T) {
+	const content = `
+[[feed]]
+url = "https://example.com/podcast.rss"
+
+[[feed]]
+url = "https://example.com/podcast.rss"
+dirname = "{{.Feed.Title}}"
+`
+	if c, err := load(writeConfig(t, t.TempDir(), content)); err == nil {
+		t.Errorf("load() with a duplicate feed URL = %+v, nil, want an error", c)
 	}
 }

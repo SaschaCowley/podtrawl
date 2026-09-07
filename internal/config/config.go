@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -12,19 +13,37 @@ import (
 const appDirName string = "podtrawl"
 const configFileName string = "config.toml"
 
+type Common struct {
+	Dirname  *string `toml:"dirname"`
+	Filename *string `toml:"filename"`
+	Sanitize *bool   `toml:"sanitize"`
+}
+
 type Feed struct {
+	Common
 	Url string `toml:"url"`
 }
 
 type Config struct {
-	Root  *string `toml:"root"`
-	Feeds []Feed  `toml:"feed"`
+	Root     *string `toml:"root"`
+	Defaults Common  `toml:"defaults"`
+	Feeds    []Feed  `toml:"feed"`
 }
 
 func load(path string) (*Config, error) {
 	var c Config
 	if _, err := toml.DecodeFile(path, &c); err != nil {
 		return nil, err
+	}
+	// Each feed may only be declared once.
+	// The cache is keyed by feed URL,
+	// so allowing duplicate entries would cause cache collisions.
+	seen := make(map[string]bool, len(c.Feeds))
+	for _, f := range c.Feeds {
+		if seen[f.Url] {
+			return nil, fmt.Errorf("feed url %q is configured more than once", f.Url)
+		}
+		seen[f.Url] = true
 	}
 	return &c, nil
 }

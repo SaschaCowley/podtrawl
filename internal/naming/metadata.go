@@ -56,10 +56,16 @@ type EpisodeMeta struct {
 	Ext string
 }
 
-// Metadata is everything a name template can see.
+// Metadata is everything the name of an episode can see.
 type Metadata struct {
 	Feed    FeedMeta
 	Episode EpisodeMeta
+}
+
+// FeedOnly is everything the name of a show directory can see.
+// Feed is spelled as it is in Metadata for consistency.
+type FeedOnly struct {
+	Feed FeedMeta
 }
 
 // NewFeedMeta describes the channel of the feed fetched from url.

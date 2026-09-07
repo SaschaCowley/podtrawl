@@ -2,17 +2,18 @@ package naming
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
 
 func TestParseRejectsUnknownFields(t *testing.T) {
-	tmpl, err := Parse("name", "{{.Foobar}}", false)
+	tmpl, err := ParseEpisode("name", "{{.Foobar}}", false)
 	if err == nil {
-		t.Fatal("Parse() on template text with unknown fields returned _, nil, want nil, error")
+		t.Fatal("ParseEpisode() on template text with unknown fields returned _, nil, want nil, error")
 	}
 	if tmpl != nil {
-		t.Errorf("Parse() on template text with unknown fields gave %v, %v, want nil, error", tmpl, err)
+		t.Errorf("ParseEpisode() on template text with unknown fields gave %v, %v, want nil, error", tmpl, err)
 	}
 }
 
@@ -27,12 +28,12 @@ func TestParseRejectsUnusablePaths(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpl, err := Parse("test", tt.text, false)
+			tmpl, err := ParseEpisode("test", tt.text, false)
 			if err == nil {
-				t.Fatalf("Parse(\"test\", %q, false) = _, nil, want nil, error", tt.text)
+				t.Fatalf("ParseEpisode(\"test\", %q, false) = _, nil, want nil, error", tt.text)
 			}
 			if tmpl != nil {
-				t.Errorf("Parse(\"test\", %q, false) = %v, %v, want nil, error", tt.text, tmpl, err)
+				t.Errorf("ParseEpisode(\"test\", %q, false) = %v, %v, want nil, error", tt.text, tmpl, err)
 			}
 		})
 	}
@@ -49,8 +50,8 @@ func TestParseAcceptsUsableTemplates(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, sanitize := range []bool{false, true} {
-				if _, err := Parse("test", tt.text, sanitize); err != nil {
-					t.Errorf("Parse(\"test\", %q, %t) = _, %v, want a template, nil", tt.text, sanitize, err)
+				if _, err := ParseEpisode("test", tt.text, sanitize); err != nil {
+					t.Errorf("ParseEpisode(\"test\", %q, %t) = _, %v, want a template, nil", tt.text, sanitize, err)
 				}
 			}
 		})
@@ -58,9 +59,9 @@ func TestParseAcceptsUsableTemplates(t *testing.T) {
 }
 
 func TestBasicRender(t *testing.T) {
-	tmpl, err := Parse("test", "{{.Feed.Title}} - {{.Episode.Title}}", false)
+	tmpl, err := ParseEpisode("test", "{{.Feed.Title}} - {{.Episode.Title}}", false)
 	if err != nil {
-		t.Fatalf("Parse(): %v", err)
+		t.Fatalf("ParseEpisode(): %v", err)
 	}
 	got, err := tmpl.Render(Metadata{FeedMeta{Title: "Show"}, EpisodeMeta{Title: "Episode"}})
 	if err != nil {
@@ -84,9 +85,9 @@ func TestRenderSanitizes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpl, err := Parse("test", "{{.Episode.Title}}", tt.sanitize)
+			tmpl, err := ParseEpisode("test", "{{.Episode.Title}}", tt.sanitize)
 			if err != nil {
-				t.Fatalf("Parse(\"test\", \"{{.Episode.Title}}\", %t) = _, %v, want a template, nil", tt.sanitize, err)
+				t.Fatalf("ParseEpisode(\"test\", \"{{.Episode.Title}}\", %t) = _, %v, want a template, nil", tt.sanitize, err)
 			}
 			got, err := tmpl.Render(Metadata{Episode: EpisodeMeta{Title: title}})
 			if err != nil {
@@ -107,9 +108,9 @@ func TestRenderSanitizesSegmentsNotValues(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpl, err := Parse("test", tt.text, true)
+			tmpl, err := ParseEpisode("test", tt.text, true)
 			if err != nil {
-				t.Fatalf("Parse(\"test\", %q, true) = _, %v, want a template, nil", tt.text, err)
+				t.Fatalf("ParseEpisode(\"test\", %q, true) = _, %v, want a template, nil", tt.text, err)
 			}
 			got, err := tmpl.Render(Metadata{Feed: FeedMeta{Title: title}})
 			if err != nil {
@@ -194,9 +195,9 @@ func TestFuncs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpl, err := Parse("test", tt.format, false)
+			tmpl, err := ParseEpisode("test", tt.format, false)
 			if err != nil {
-				t.Fatalf("Parse(\"test\", %q, false) = _, %v, want string, nil", tt.format, err)
+				t.Fatalf("ParseEpisode(\"test\", %q, false) = _, %v, want string, nil", tt.format, err)
 			}
 			got, err := tmpl.Render(metadata)
 			if err != nil {
@@ -264,6 +265,42 @@ func TestClean(t *testing.T) {
 			}
 			if got != tt.wantPath {
 				t.Errorf("clean(%q, %t) = %q, nil, want %q, nil", tt.path, tt.sanitize, got, tt.wantPath)
+			}
+		})
+	}
+}
+
+func TestParseFeedRejectsEpisodes(t *testing.T) {
+	rejected := []string{
+		"{{.Episode.Title}}",
+		`{{.Episode.PubDate | date "2006"}}`,
+		`{{sanitizeOr .Episode.Title "Archive"}}`,
+		`{{sanitize .Feed.Title}}/{{.Episode.PubDate | date "2006"}}`,
+	}
+	for _, text := range rejected {
+		t.Run(text, func(t *testing.T) {
+			tmpl, err := ParseFeed("dirname", text, true)
+			if err == nil {
+				t.Fatalf("ParseFeed(\"dirname\", %q, true) = %v, nil, want nil, an error", text, tmpl)
+			}
+			if tmpl != nil {
+				t.Errorf("ParseFeed(\"dirname\", %q, true) = %v alongside an error, want nil", text, tmpl)
+			}
+			if !strings.Contains(err.Error(), "Episode") {
+				t.Errorf("ParseFeed(\"dirname\", %q, true) = _, %v, want an error naming Episode", text, err)
+			}
+		})
+	}
+	accepted := []string{
+		DefaultDirname,
+		"podcasts",
+		"{{.Feed.Title}}",
+		`{{sanitize .Feed.Title}}/{{.Feed.Url | shorthash}}`,
+	}
+	for _, text := range accepted {
+		t.Run(text, func(t *testing.T) {
+			if _, err := ParseFeed("dirname", text, true); err != nil {
+				t.Errorf("ParseFeed(\"dirname\", %q, true) = _, %v, want a template, nil", text, err)
 			}
 		})
 	}

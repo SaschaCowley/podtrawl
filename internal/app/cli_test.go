@@ -12,7 +12,6 @@ import (
 
 	"ssch.cc/podtrawl/internal/config"
 	"ssch.cc/podtrawl/internal/feed"
-	"ssch.cc/podtrawl/internal/naming"
 )
 
 func TestRootDir(t *testing.T) {
@@ -72,37 +71,6 @@ func TestRootDirUnset(t *testing.T) {
 	}
 	if got != want {
 		t.Errorf("rootDir(root unset) = %q, want %q", got, want)
-	}
-}
-
-func TestEpisodeFileName(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{"plain url", "https://cdn.example.com/shows/1/episode.mp3", "episode.mp3"},
-		{"query string is ignored", "https://cdn.example.com/ep12.mp3?token=abc&e=99", "ep12.mp3"},
-		{"percent encoding is decoded", "https://cdn.example.com/ep%2012.mp3", "ep 12.mp3"},
-		{"illegal characters are replaced", "https://cdn.example.com/a:b.mp3", "a-b.mp3"},
-		{"traversal is contained", "https://cdn.example.com/../../etc/passwd", "passwd"},
-		{
-			"no path to use",
-			"https://cdn.example.com/",
-			"episode-" + naming.ShortHash("https://cdn.example.com/"),
-		},
-		{
-			"unparseable url",
-			"://not a url",
-			"episode-" + naming.ShortHash("://not a url"),
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := episodeFileName(tt.input); got != tt.want {
-				t.Errorf("episodeFileName(%q) = %q, want %q", tt.input, got, tt.want)
-			}
-		})
 	}
 }
 

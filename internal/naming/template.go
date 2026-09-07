@@ -10,30 +10,46 @@ import (
 	"ssch.cc/podtrawl/internal/fsname"
 )
 
-type Template struct {
+// Template renders one kind of name.
+// T is the metadata that kind of name can see:
+// FeedOnly for a show directory;
+// or Metadata for an episode of a show.
+type Template[T any] struct {
 	template *template.Template
 	sanitize bool
 }
 
-// Parse compiles a name template.
-// Templates that name something Metadata does not carry,
-// or that cannot produce a usable relative path are rejected.
+// ParseFeed compiles a template for an entire feed.
+// It sees .Feed, but no episode.
+func ParseFeed(name, text string, sanitize bool) (*Template[FeedOnly], error) {
+	return parse(name, text, sanitize, FeedOnly{Feed: probe.Feed})
+}
+
+// ParseEpisode compiles a template for an episode of a feed.
+// It sees .Feed and .Episode.
+func ParseEpisode(name, text string, sanitize bool) (*Template[Metadata], error) {
+	return parse(name, text, sanitize, probe)
+}
+
+// parse compiles a name template, validating it against probe.
+// Templates that name something that T does not carry,
+// or that cannot produce a usable relative path, are rejected.
 //
 // When sanitize is true, each segment of the rendered path is made safe for the file system.
 // To sanitize individual values, they should be piped to sanitize in the template.
-func Parse(name, text string, sanitize bool) (*Template, error) {
+func parse[T any](name, text string, sanitize bool, probe T) (*Template[T], error) {
 	tmpl, err := template.New(name).Funcs(funcs).Parse(text)
 	if err != nil {
 		return nil, err
 	}
-	t := &Template{tmpl, sanitize}
+	t := &Template[T]{tmpl, sanitize}
 	if _, err := t.Render(probe); err != nil {
 		return nil, err
 	}
 	return t, nil
 }
 
-// probe stands in for a feed while Parse checks a template.
+// probe stands in for a feed while a template is checked.
 var probe = Metadata{
 	Feed: FeedMeta{
 		Title:       "feed title",
@@ -56,9 +72,10 @@ var probe = Metadata{
 	},
 }
 
-func (t *Template) Render(m Metadata) (string, error) {
+// Render produces a relative path from the metadata of one show or episode.
+func (t *Template[T]) Render(v T) (string, error) {
 	var wr strings.Builder
-	if err := t.template.Execute(&wr, m); err != nil {
+	if err := t.template.Execute(&wr, v); err != nil {
 		return "", err
 	}
 	return clean(wr.String(), t.sanitize)
@@ -138,3 +155,9 @@ var funcs template.FuncMap = template.FuncMap{
 	"trim":       strings.TrimSpace,
 	"replace":    func(old, new, s string) string { return strings.ReplaceAll(s, old, new) },
 }
+
+// Default name templates.
+const (
+	DefaultDirname  = `{{ sanitizeOr .Feed.Title (printf "show-%s" (shorthash .Feed.Url)) }}`
+	DefaultFilename = `{{ sanitizeOr .Episode.Filename (printf "episode-%s" (shorthash .Episode.Url)) }}`
+)

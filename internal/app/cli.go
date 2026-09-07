@@ -7,10 +7,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
-	"path"
 	"path/filepath"
 
 	"github.com/adrg/xdg"
@@ -20,7 +18,6 @@ import (
 	"ssch.cc/podtrawl/internal/clilog"
 	"ssch.cc/podtrawl/internal/config"
 	"ssch.cc/podtrawl/internal/feed"
-	"ssch.cc/podtrawl/internal/fsname"
 	"ssch.cc/podtrawl/internal/naming"
 )
 
@@ -56,6 +53,10 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) error {
 		log.Warn("config has no feeds")
 		return nil
 	}
+	feeds, err := resolve(conf)
+	if err != nil {
+		return err
+	}
 	cache, err := newCache(log)
 	if err != nil {
 		return err
@@ -68,14 +69,14 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) error {
 	// A failing feed or episode shouldn't stop the run,
 	// but it must still be visible in the exit code so a scheduled run can be seen to have failed.
 	var failures int
-	for _, f := range conf.Feeds {
+	for _, f := range feeds {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		// Every message about this feed carries its url,
 		// so the messages below don't have to repeat it.
-		fLog := log.With("feed", f.Url)
-		rss, err := getFeed(ctx, f.Url)
+		fLog := log.With("feed", f.url)
+		rss, err := getFeed(ctx, f.url)
 		if err != nil {
 			fLog.Error("fetch feed", "err", err)
 			failures++
@@ -86,13 +87,16 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) error {
 			fLog.Debug("channel has no items")
 			continue
 		}
-		// The title comes straight from the feed,
-		// so it has to be made safe before it becomes a directory name.
-		// Feeds without a usable title fall back to the feed url,
-		// which is stable across runs.
-		showDir := fsname.ComponentOr(rss.Channel.Title, "show-"+naming.ShortHash(f.Url))
-		dirName := filepath.Join(root, showDir)
+		// What the channel says is the same for every episode of this feed.
+		feedMeta := naming.NewFeedMeta(rss.Channel, f.url)
+		dirName, err := f.showDir(root, naming.FeedOnly{Feed: feedMeta})
+		if err != nil {
+			fLog.Error("show directory", "err", err)
+			failures++
+			continue
+		}
 		fLog.Debug("show directory", "dir", dirName)
+		meta := naming.Metadata{Feed: feedMeta}
 		for _, item := range rss.Channel.Items {
 			if err := ctx.Err(); err != nil {
 				return err
@@ -103,12 +107,19 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) error {
 			}
 			enclosure := item.Enclosures[0]
 			key := episodeKey(item, enclosure)
-			cached := cache.Downloaded(f.Url, key)
+			cached := cache.Downloaded(f.url, key)
 			if cached && !opts.dryRun {
 				fLog.Debug("already downloaded", "episode", key)
 				continue
 			}
-			dest := filepath.Join(dirName, episodeFileName(enclosure.Url))
+			meta.Episode = naming.NewEpisodeMeta(item, enclosure)
+			dest, err := f.episodeDest(dirName, meta)
+			if err != nil {
+				fLog.Error("episode name", "item", itemTitle(item), "err", err)
+				failures++
+				continue
+			}
+			fLog.Debug("episode destination", "item", itemTitle(item), "dest", dest)
 			if opts.dryRun {
 				status := "download"
 				if cached {
@@ -122,7 +133,7 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) error {
 				failures++
 				continue
 			}
-			cache.SetDownloaded(f.Url, key, true)
+			cache.SetDownloaded(f.url, key, true)
 			// An unsaved cache means we might have to do more work later,
 			// but shouldn't mean we abandon all the remaining downloads.
 			if err := cache.Save(); err != nil {
@@ -228,26 +239,6 @@ func episodeKey(item feed.Item, enclosure feed.Enclosure) string {
 		return item.Guid.Value
 	}
 	return enclosure.Url
-}
-
-// episodeFileName derives a safe file name from an enclosure url.
-// The query string is ignored,
-// as signed urls would otherwise put their whole token in the name.
-// A url that yields nothing usable,
-// such as one ending in a slash,
-// falls back to a hash of the url itself.
-func episodeFileName(rawUrl string) string {
-	var name string
-	if u, err := url.Parse(rawUrl); err == nil {
-		// Path is already percent-decoded.
-		// Base reports an empty path as "."
-		// and a path of nothing but slashes as "/",
-		// neither of which is a name.
-		if base := path.Base(u.Path); base != "." && base != "/" {
-			name = base
-		}
-	}
-	return fsname.ComponentOr(name, "episode-"+naming.ShortHash(rawUrl))
 }
 
 // downloadRoot is the directory episodes are stored under.
