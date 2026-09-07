@@ -1,8 +1,8 @@
 // Package naming derives the names under which podtrawl writes episodes.
 //
 // Metadata flattens channel, item and enclosure attributes into plain values.
-// Most elements in RSS are optional, so feed uses  pointers  to distinguish omissions from zero values.
-// They are converted to plane values so that templates can't dereference nil pointers.
+// Most elements in RSS are optional, so feed uses pointers to distinguish omissions from zero values.
+// They are converted to plain values so that templates cannot dereference nil pointers.
 package naming
 
 import (
@@ -73,7 +73,7 @@ func NewFeedMeta(c feed.Channel, url string) FeedMeta {
 }
 
 // NewEpisodeMeta describes one enclosure of one item.
-// nil pointers become zero values .
+// nil pointers become zero values.
 func NewEpisodeMeta(item feed.Item, enclosure feed.Enclosure) EpisodeMeta {
 	m := EpisodeMeta{
 		Url:    enclosure.Url,
@@ -99,13 +99,14 @@ func NewEpisodeMeta(item feed.Item, enclosure feed.Enclosure) EpisodeMeta {
 	return m
 }
 
+// nameParts derives an episode's name from its download URL and media type.
+//
+// name is the last segment of the URL path.
+// stem is name less its file extension, if any.
+// ext is name's file extension, or one derived from the media type.
 func nameParts(rawUrl, mediaType string) (name, stem, ext string) {
 	name = baseName(rawUrl)
-	if len(name) < 3 {
-		stem = name
-	} else {
-		stem, ext = splitName(name)
-	}
+	stem, ext = splitName(name)
 	if ext == "" {
 		ext = extFromType(mediaType)
 	}

@@ -2,7 +2,6 @@ package naming
 
 import (
 	"fmt"
-	"io"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -16,15 +15,45 @@ type Template struct {
 	sanitize bool
 }
 
+// Parse compiles a name template.
+// Templates that name something Metadata does not carry,
+// or that cannot produce a usable relative path are rejected.
+//
+// When sanitize is true, each segment of the rendered path is made safe for the file system.
+// To sanitize individual values, they should be piped to sanitize in the template.
 func Parse(name, text string, sanitize bool) (*Template, error) {
 	tmpl, err := template.New(name).Funcs(funcs).Parse(text)
 	if err != nil {
 		return nil, err
 	}
-	if err := tmpl.Execute(io.Discard, Metadata{FeedMeta{}, EpisodeMeta{}}); err != nil {
+	t := &Template{tmpl, sanitize}
+	if _, err := t.Render(probe); err != nil {
 		return nil, err
 	}
-	return &Template{tmpl, sanitize}, nil
+	return t, nil
+}
+
+// probe stands in for a feed while Parse checks a template.
+var probe = Metadata{
+	Feed: FeedMeta{
+		Title:       "feed title",
+		Link:        "https://example.com",
+		Description: "feed description",
+		Url:         "https://example.com/feed.xml",
+	},
+	Episode: EpisodeMeta{
+		Title:       "episode title",
+		Link:        "https://example.com/1",
+		Description: "episode description",
+		Guid:        "episode guid",
+		PubDate:     time.Date(2006, time.January, 2, 15, 4, 5, 0, time.UTC),
+		Url:         "https://example.com/episode.mp3",
+		Type:        "audio/mpeg",
+		Length:      1,
+		Filename:    "episode.mp3",
+		Stem:        "episode",
+		Ext:         ".mp3",
+	},
 }
 
 func (t *Template) Render(m Metadata) (string, error) {
@@ -37,7 +66,7 @@ func (t *Template) Render(m Metadata) (string, error) {
 
 // toSlash converts path separators to slashes.
 //
-// filepath.toSlash only converts backslashes to slashes if backslash is the system path separator.
+// filepath.ToSlash only converts backslashes to slashes if backslash is the system path separator.
 // This does so regardless.
 func toSlash(path string) string {
 	n := []byte(path)
@@ -52,7 +81,7 @@ func toSlash(path string) string {
 // isAbs determines whether the given path is absolute.
 //
 // The given path should only use slash as the path separator.
-// This does check Windows-style paths.
+// This does recognise Windows-style paths.
 func isAbs(path string) bool {
 	switch {
 	case len(path) == 0:
@@ -66,6 +95,11 @@ func isAbs(path string) bool {
 	}
 }
 
+// clean turns a rendered template into a relative path, one segment per slash.
+// Empty and "." segments are dropped;
+// paths that are empty, absolute, or traverse upward are rejected.
+// When sanitize is set, every segment is made safe for the file system,
+// and a segment that sanitizes away to nothing is an error.
 func clean(path string, sanitize bool) (string, error) {
 	path = toSlash(path)
 	if isAbs(path) {
@@ -87,6 +121,9 @@ func clean(path string, sanitize bool) (string, error) {
 			}
 		}
 		segments = append(segments, segment)
+	}
+	if len(segments) == 0 {
+		return "", fmt.Errorf("path must not be empty: %q", path)
 	}
 	return filepath.Join(segments...), nil
 }

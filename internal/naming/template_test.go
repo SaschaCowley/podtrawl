@@ -16,6 +16,47 @@ func TestParseRejectsUnknownFields(t *testing.T) {
 	}
 }
 
+func TestParseRejectsUnusablePaths(t *testing.T) {
+	tests := []struct{ name, text string }{
+		{"empty", ""},
+		{"names nothing", "./."},
+		{"absolute unix-like", "/podcasts/{{.Feed.Title}}"},
+		{"absolute windows-like", `C:\podcasts\{{.Feed.Title}}`},
+		{"leading traversal", "../{{.Feed.Title}}"},
+		{"interior traversal", "{{.Feed.Title}}/../{{.Episode.Title}}"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpl, err := Parse("test", tt.text, false)
+			if err == nil {
+				t.Fatalf("Parse(\"test\", %q, false) = _, nil, want nil, error", tt.text)
+			}
+			if tmpl != nil {
+				t.Errorf("Parse(\"test\", %q, false) = %v, %v, want nil, error", tt.text, tmpl, err)
+			}
+		})
+	}
+}
+
+func TestParseAcceptsUsableTemplates(t *testing.T) {
+	tests := []struct{ name, text string }{
+		{"one field", "{{.Episode.Title}}"},
+		{"a field per segment", "{{.Feed.Title}}/{{.Episode.Title}}"},
+		{"name from its parts", "{{.Episode.Stem}}{{.Episode.Ext}}"},
+		{"dated episode in a show directory", `{{.Feed.Title}}/{{.Episode.PubDate | date "2006-01-02"}} {{.Episode.Title}}{{.Episode.Ext}}`},
+		{"literal segments", "podcasts/{{.Feed.Title}}"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, sanitize := range []bool{false, true} {
+				if _, err := Parse("test", tt.text, sanitize); err != nil {
+					t.Errorf("Parse(\"test\", %q, %t) = _, %v, want a template, nil", tt.text, sanitize, err)
+				}
+			}
+		})
+	}
+}
+
 func TestBasicRender(t *testing.T) {
 	tmpl, err := Parse("test", "{{.Feed.Title}} - {{.Episode.Title}}", false)
 	if err != nil {
@@ -23,11 +64,61 @@ func TestBasicRender(t *testing.T) {
 	}
 	got, err := tmpl.Render(Metadata{FeedMeta{Title: "Show"}, EpisodeMeta{Title: "Episode"}})
 	if err != nil {
-		t.Fatalf("tmpl.Render(): %e", err)
+		t.Fatalf("tmpl.Render(): %v", err)
 	}
 	want := "Show - Episode"
 	if got != want {
 		t.Errorf("tmpl.Render() = %q, want %q", got, want)
+	}
+}
+
+func TestRenderSanitizes(t *testing.T) {
+	const title = "Episode: One"
+	tests := []struct {
+		name     string
+		sanitize bool
+		want     string
+	}{
+		{"sanitized", true, "Episode- One"},
+		{"unsanitized", false, title},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpl, err := Parse("test", "{{.Episode.Title}}", tt.sanitize)
+			if err != nil {
+				t.Fatalf("Parse(\"test\", \"{{.Episode.Title}}\", %t) = _, %v, want a template, nil", tt.sanitize, err)
+			}
+			got, err := tmpl.Render(Metadata{Episode: EpisodeMeta{Title: title}})
+			if err != nil {
+				t.Fatalf("tmpl.Render() = _, %v, want %q, nil", err, tt.want)
+			}
+			if got != tt.want {
+				t.Errorf("tmpl.Render() with Episode.Title = %q gave %q, want %q", title, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRenderSanitizesSegmentsNotValues(t *testing.T) {
+	const title = "AC/DC Weekly"
+	tests := []struct{ name, text, want string }{
+		{"a value can create segments", "{{.Feed.Title}}", filepath.Join("AC", "DC Weekly")},
+		{"sanitize keeps it to one", "{{sanitize .Feed.Title}}", "AC-DC Weekly"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpl, err := Parse("test", tt.text, true)
+			if err != nil {
+				t.Fatalf("Parse(\"test\", %q, true) = _, %v, want a template, nil", tt.text, err)
+			}
+			got, err := tmpl.Render(Metadata{Feed: FeedMeta{Title: title}})
+			if err != nil {
+				t.Fatalf("tmpl.Render() = _, %v, want %q, nil", err, tt.want)
+			}
+			if got != tt.want {
+				t.Errorf("tmpl.Render() with Feed.Title = %q gave %q, want %q", title, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -57,6 +148,11 @@ func TestIsAbs(t *testing.T) {
 		{"absolute UNC", "//server/share/dir/file", true},
 		{"raw namespace", "//?/test", true},
 		{"device namespace", "//./COM56", true},
+		{"empty", "", false},
+		{"bare name", "episode.mp3", false},
+		{"relative path", "show/episode.mp3", false},
+		{"dot-relative path", "./show/episode.mp3", false},
+		{"drive-relative", "C:episode.mp3", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -146,6 +242,10 @@ func TestClean(t *testing.T) {
 		{"space segment unsanitized", "test/ /path", false, filepath.Join("test", " ", "path"), false},
 		{"reserved segment sanitized", "test/nul", true, filepath.Join("test", "nul_"), false},
 		{"reserved segment unsanitized", "test/nul", false, filepath.Join("test", "nul"), false},
+		{"empty sanitized", "", true, "", true},
+		{"empty unsanitized", "", false, "", true},
+		{"nothing but dots sanitized", "./.", true, "", true},
+		{"nothing but dots unsanitized", "./.", false, "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -160,7 +260,7 @@ func TestClean(t *testing.T) {
 				return
 			}
 			if err != nil {
-				t.Fatalf("clean(%q, %t) = _, %v, want _, nill", tt.path, tt.sanitize, err)
+				t.Fatalf("clean(%q, %t) = _, %v, want _, nil", tt.path, tt.sanitize, err)
 			}
 			if got != tt.wantPath {
 				t.Errorf("clean(%q, %t) = %q, nil, want %q, nil", tt.path, tt.sanitize, got, tt.wantPath)

@@ -29,10 +29,10 @@ func TestSplitName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			gotStem, gotExt := splitName(tt.filename)
 			if wantStem := tt.wantStem; wantStem != gotStem {
-				t.Errorf("splitName(%q) = %q _, want %q _", tt.name, gotStem, wantStem)
+				t.Errorf("splitName(%q) = %q _, want %q _", tt.filename, gotStem, wantStem)
 			}
 			if wantExt := tt.wantExt; wantExt != gotExt {
-				t.Errorf("splitName(%q) = _ %q, want _ %q", tt.name, gotExt, wantExt)
+				t.Errorf("splitName(%q) = _ %q, want _ %q", tt.filename, gotExt, wantExt)
 			}
 		})
 	}
@@ -40,15 +40,15 @@ func TestSplitName(t *testing.T) {
 
 func TestBaseName(t *testing.T) {
 	tests := []struct{ name, url, want string }{
-		{"plane file", "https://example.com/episode.mp3", "episode.mp3"},
-		{"plane dir", "https://example.com/episode/", "episode"},
+		{"plain file", "https://example.com/episode.mp3", "episode.mp3"},
+		{"plain dir", "https://example.com/episode/", "episode"},
 		{"file with query", "https://example.com/episode.mp3?abc=def&ghi=jkl", "episode.mp3"},
 		{"dir with query", "https://example.com/episode/?mno=pqr&stu=vwx", "episode"},
 		{"file with anchor", "https://example.com/episode.mp3#y", "episode.mp3"},
 		{"dir with anchor", "https://example.com/episode/#z", "episode"},
 		{"empty path", "https://example.com/", ""},
 		{"no path", "https://example.com", ""},
-		{"not a URL", "https:/", ""},
+		{"not a URL", "://not a url", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -68,7 +68,7 @@ func TestExtFromType(t *testing.T) {
 		{"apple mp4 audio", "audio/x-m4a", ".m4a"},
 		{"invalid mime", "not a mime", ""},
 		{"empty", "", ""},
-		{"unregistered type", "audio/x-podtrawl-nonexistant", ""},
+		{"unregistered type", "audio/x-podtrawl-nonexistent", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -147,15 +147,17 @@ func TestNewFeedMeta(t *testing.T) {
 	}
 }
 
-func checkName(t *testing.T, m EpisodeMeta, extFromName bool) {
+// checkName asserts what EpisodeMeta documents about its name fields:
+// that NewEpisodeMeta derives them from the enclosure it was given,
+// and that the name is its stem, plus its own extension when it had one.
+// Ext alone may be set, as a name without one takes it from the media type.
+func checkName(t *testing.T, m EpisodeMeta) {
 	t.Helper()
 	if m.Filename == "" && m.Stem != "" {
 		t.Errorf("Filename is empty alongside Stem = %q, want an empty stem", m.Stem)
 	}
-	if extFromName {
-		if want := m.Stem + m.Ext; m.Filename != want {
-			t.Errorf("Filename = %q, want Stem+Ext = Filename, got %q", m.Filename, want)
-		}
+	if m.Filename != m.Stem && m.Filename != m.Stem+m.Ext {
+		t.Errorf("Filename = %q, want Stem = %q or Stem+Ext = %q", m.Filename, m.Stem, m.Stem+m.Ext)
 	}
 	wantFilename, wantStem, wantExt := nameParts(m.Url, m.Type)
 	if wantFilename != m.Filename {
@@ -180,7 +182,7 @@ func TestNewEpisodeMeta(t *testing.T) {
 	}
 	enclosure := feed.Enclosure{Url: episodeUrl, Type: "audio/mpeg", Length: 1234}
 	m := NewEpisodeMeta(item, enclosure)
-	checkName(t, m, true)
+	checkName(t, m)
 	if m.Title != "Episode 12" {
 		t.Errorf("gave Title = %q, want %q", m.Title, "Episode 12")
 	}
