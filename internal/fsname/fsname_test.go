@@ -92,8 +92,8 @@ func TestComponent(t *testing.T) {
 			}
 			// Whatever the input, the result must be usable as a single
 			// component on every target file system.
-			if len(got) > maxComponentLen {
-				t.Errorf("Component(%q) is %d bytes, want at most %d", tt.input, len(got), maxComponentLen)
+			if len(got) > MaxComponentLen {
+				t.Errorf("Component(%q) is %d bytes, want at most %d", tt.input, len(got), MaxComponentLen)
 			}
 			if !utf8.ValidString(got) {
 				t.Errorf("Component(%q) = %q, which is not valid UTF-8", tt.input, got)

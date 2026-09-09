@@ -1,7 +1,9 @@
 package app
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -12,6 +14,8 @@ import (
 // resolvedFeed is one configured feed with its names settled.
 type resolvedFeed struct {
 	url      string
+	sanitize bool
+	existing naming.Existing
 	dirname  *naming.Template[naming.FeedOnly]
 	filename *naming.Template[naming.Metadata]
 }
@@ -31,7 +35,17 @@ func resolve(c *config.Config) ([]resolvedFeed, error) {
 		if err != nil {
 			return nil, fmt.Errorf("feed %q: filename: %w", f.Url, err)
 		}
-		feeds = append(feeds, resolvedFeed{url: f.Url, dirname: dirname, filename: filename})
+		existing, err := naming.ParseExisting(setting("increment", f.Existing, c.Defaults.Existing))
+		if err != nil {
+			return nil, fmt.Errorf("feed %q: existing: %w", f.Url, err)
+		}
+		feeds = append(feeds, resolvedFeed{
+			url:      f.Url,
+			sanitize: sanitize,
+			existing: existing,
+			dirname:  dirname,
+			filename: filename,
+		})
 	}
 	return feeds, nil
 }
@@ -84,4 +98,36 @@ func (f resolvedFeed) episodeDest(dir string, m naming.Metadata) (string, error)
 		return "", err
 	}
 	return dest, nil
+}
+
+// maxNumbered is the upper bound for filename incrementing.
+var maxNumbered = 1000
+
+// available is where an episode is to be written, given what is already there.
+// It reports false when the episode is to be skipped.
+func (f resolvedFeed) available(dest string) (string, bool, error) {
+	if _, err := os.Stat(dest); errors.Is(err, os.ErrNotExist) {
+		return dest, true, nil
+	} else if err != nil {
+		return "", false, err
+	}
+	switch f.existing {
+	case naming.Skip:
+		return dest, false, nil
+	case naming.Replace:
+		return dest, true, nil
+	case naming.Increment:
+		dir, name := filepath.Split(dest)
+		for n := 1; n <= maxNumbered; n++ {
+			numbered := filepath.Join(dir, naming.Numbered(name, n, f.sanitize))
+			if _, err := os.Stat(numbered); errors.Is(err, os.ErrNotExist) {
+				return numbered, true, nil
+			} else if err != nil {
+				return "", false, err
+			}
+		}
+		return "", false, fmt.Errorf("no free name for %q after %d tries", dest, maxNumbered)
+	default:
+		return dest, false, fmt.Errorf("unsupported value of existing: %v", f.existing)
+	}
 }

@@ -119,6 +119,26 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) error {
 				failures++
 				continue
 			}
+			if !cached {
+				var free bool
+				want := dest
+				if dest, free, err = f.available(dest); err != nil {
+					fLog.Error("episode destination", "item", itemTitle(item), "err", err)
+					failures++
+					continue
+				}
+				if !free {
+					if opts.dryRun {
+						fmt.Printf("%-8s  %s\n", "skip", dest)
+					} else {
+						fLog.Warn("file exists, skipping episode", "item", itemTitle(item), "file", dest)
+					}
+					continue
+				}
+				if dest != want {
+					fLog.Warn("file exists, incrementing", "item", itemTitle(item), "taken", want, "file", dest)
+				}
+			}
 			fLog.Debug("episode destination", "item", itemTitle(item), "dest", dest)
 			if opts.dryRun {
 				status := "download"

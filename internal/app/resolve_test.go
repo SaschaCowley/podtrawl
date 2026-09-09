@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -8,6 +10,7 @@ import (
 
 	"ssch.cc/podtrawl/internal/config"
 	"ssch.cc/podtrawl/internal/feed"
+	"ssch.cc/podtrawl/internal/fsname"
 	"ssch.cc/podtrawl/internal/naming"
 )
 
@@ -282,5 +285,184 @@ func TestEpisodeDestReportsAnUnusableName(t *testing.T) {
 	}
 	if got != "" {
 		t.Errorf("episodeDest() = %q alongside an error, want an empty string", got)
+	}
+}
+
+func touch(t *testing.T, path string) string {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatalf("creating %s: %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, nil, 0644); err != nil {
+		t.Fatalf("creating %s: %v", path, err)
+	}
+	return path
+}
+
+// withExisting resolves one feed with the named existing policy.
+func withExisting(t *testing.T, policy string) resolvedFeed {
+	t.Helper()
+	return resolveOne(t, &config.Config{Feeds: []config.Feed{{
+		Url:    feedUrl,
+		Common: config.Common{Existing: new(policy)},
+	}}})
+}
+
+func TestAvailableNoConflict(t *testing.T) {
+	for _, policy := range []string{"increment", "skip", "replace"} {
+		t.Run(policy, func(t *testing.T) {
+			dest := filepath.Join(t.TempDir(), "ep12.mp3")
+			got, free, err := withExisting(t, policy).available(dest)
+			if err != nil {
+				t.Fatalf("available(%q) = _, _, %v, want nil", dest, err)
+			}
+			if !free {
+				t.Errorf("available(%q) reported the path taken, want it free", dest)
+			}
+			if got != dest {
+				t.Errorf("available(%q) = %q, want the path unchanged", dest, got)
+			}
+		})
+	}
+}
+
+func TestAvailableSkip(t *testing.T) {
+	dest := touch(t, filepath.Join(t.TempDir(), "ep12.mp3"))
+	got, free, err := withExisting(t, "skip").available(dest)
+	if err != nil {
+		t.Fatalf("available(%q) = _, _, %v, want nil", dest, err)
+	}
+	if free {
+		t.Errorf("available(%q) reported a free path, want the episode skipped", dest)
+	}
+	if got != dest {
+		t.Errorf("available(%q) = %q, want the path", dest, got)
+	}
+}
+
+func TestAvailableReplace(t *testing.T) {
+	dest := touch(t, filepath.Join(t.TempDir(), "ep12.mp3"))
+	got, free, err := withExisting(t, "replace").available(dest)
+	if err != nil {
+		t.Fatalf("available(%q) = _, _, %v, want nil", dest, err)
+	}
+	if !free {
+		t.Errorf("available(%q) reported the path taken, want it overwritten", dest)
+	}
+	if got != dest {
+		t.Errorf("available(%q) = %q, want the path unchanged", dest, got)
+	}
+}
+
+func TestAvailableIncrement(t *testing.T) {
+	dir := t.TempDir()
+	f := withExisting(t, "increment")
+	dest := touch(t, filepath.Join(dir, "ep12.mp3"))
+	for _, want := range []string{"ep12 (1).mp3", "ep12 (2).mp3", "ep12 (3).mp3"} {
+		got, free, err := f.available(dest)
+		if err != nil {
+			t.Fatalf("available(%q) = _, _, %v, want nil", dest, err)
+		}
+		if !free {
+			t.Fatalf("available(%q) reported no free name, want %q", dest, want)
+		}
+		if got != filepath.Join(dir, want) {
+			t.Fatalf("available(%q) = %q, want %q", dest, got, filepath.Join(dir, want))
+		}
+		touch(t, got)
+	}
+}
+
+func TestAvailableIncrementNumbersFile(t *testing.T) {
+	dir := t.TempDir()
+	f := withExisting(t, "increment")
+	dest := touch(t, filepath.Join(dir, "2026", "ep12.mp3"))
+	got, free, err := f.available(dest)
+	if err != nil || !free {
+		t.Fatalf("available(%q) = %q, %t, %v, want a free name, true, nil", dest, got, free, err)
+	}
+	if want := filepath.Join(dir, "2026", "ep12 (1).mp3"); got != want {
+		t.Errorf("available(%q) = %q, want %q", dest, got, want)
+	}
+}
+
+func TestAvailableIncrementBounded(t *testing.T) {
+	dir := t.TempDir()
+	f := withExisting(t, "increment")
+	defer func(n int) { maxNumbered = n }(maxNumbered)
+	maxNumbered = 4
+	dest := touch(t, filepath.Join(dir, "ep12.mp3"))
+	for n := 1; n <= maxNumbered; n++ {
+		touch(t, filepath.Join(dir, naming.Numbered("ep12.mp3", n, true)))
+	}
+	got, free, err := f.available(dest)
+	if err == nil {
+		t.Fatalf("available(%q) = %q, %t, nil, want an error", dest, got, free)
+	}
+	if got != "" || free {
+		t.Errorf("available(%q) = %q, %t alongside an error, want \"\", false", dest, got, free)
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf("%q", dest)) {
+		t.Errorf("available(%q) = _, _, %v, want an error naming the path", dest, err)
+	}
+}
+
+func TestAvailableIncrementLongName(t *testing.T) {
+	dir := t.TempDir()
+	f := withExisting(t, "increment")
+	long := strings.Repeat("a", fsname.MaxComponentLen-4) + ".mp3"
+	dest := touch(t, filepath.Join(dir, long))
+	got, free, err := f.available(dest)
+	if err != nil || !free {
+		t.Fatalf("available(<long>) = %q, %t, %v, want a free name, true, nil", got, free, err)
+	}
+	name := filepath.Base(got)
+	if name == long {
+		t.Error("available(<long>) = <input path>, want a name that differs from the one taken")
+	}
+	if len(name) > fsname.MaxComponentLen {
+		t.Errorf("available(<long>) gave a %d byte name, want at most %d", len(name), fsname.MaxComponentLen)
+	}
+	if _, ok := fsname.Component(name); !ok {
+		t.Errorf("available(<long>) = %q, want a usable component", name)
+	}
+}
+
+func TestResolveExistingPrecedence(t *testing.T) {
+	tests := []struct {
+		name           string
+		feed, defaults *string
+		want           naming.Existing
+	}{
+		{"built-in", nil, nil, naming.Increment},
+		{"defaults", nil, new("skip"), naming.Skip},
+		{"feed", new("replace"), nil, naming.Replace},
+		{"feed over defaults", new("replace"), new("skip"), naming.Replace},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := resolveOne(t, &config.Config{
+				Defaults: config.Common{Existing: tt.defaults},
+				Feeds:    []config.Feed{{Url: feedUrl, Common: config.Common{Existing: tt.feed}}},
+			})
+			if f.existing != tt.want {
+				t.Errorf("resolve() gave existing = %v, want %v", f.existing, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveRejectsUnknownExisting(t *testing.T) {
+	feeds, err := resolve(&config.Config{Feeds: []config.Feed{{
+		Url:    feedUrl,
+		Common: config.Common{Existing: new("clobber")},
+	}}})
+	if err == nil {
+		t.Fatalf("resolve() = %v, nil, want an error", feeds)
+	}
+	for _, want := range []string{"existing", feedUrl, "clobber"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("resolve() = _, %v, want an error naming %q", err, want)
+		}
 	}
 }

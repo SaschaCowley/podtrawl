@@ -17,6 +17,7 @@ type Common struct {
 	Dirname  *string `toml:"dirname"`
 	Filename *string `toml:"filename"`
 	Sanitize *bool   `toml:"sanitize"`
+	Existing *string `toml:"existing"`
 }
 
 type Feed struct {

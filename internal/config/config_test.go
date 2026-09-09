@@ -305,3 +305,30 @@ dirname = "{{.Feed.Title}}"
 		t.Errorf("load() with a duplicate feed URL = %+v, nil, want an error", c)
 	}
 }
+
+func TestLoadExisting(t *testing.T) {
+	const content = `
+[defaults]
+existing = "skip"
+
+[[feed]]
+url = "https://example.com/podcast.rss"
+existing = "replace"
+
+[[feed]]
+url = "https://example.org/another/feed.xml"
+`
+	c, err := load(writeConfig(t, t.TempDir(), content))
+	if err != nil {
+		t.Fatalf("load() = _, %v, want Config, nil", err)
+	}
+	if c.Defaults.Existing == nil || *c.Defaults.Existing != "skip" {
+		t.Errorf("Defaults.Existing = %s, want %q", str(c.Defaults.Existing), "skip")
+	}
+	if f := c.Feeds[0]; f.Existing == nil || *f.Existing != "replace" {
+		t.Errorf("Feeds[0].Existing = %s, want %q", str(f.Existing), "replace")
+	}
+	if f := c.Feeds[1]; f.Existing != nil {
+		t.Errorf("Feeds[1].Existing = %s, want nil", str(f.Existing))
+	}
+}

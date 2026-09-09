@@ -18,12 +18,12 @@ import (
 // replacement stands in for any rune that cannot appear in a portable name.
 const replacement = '-'
 
-// maxComponentLen is the maximum length, in bytes,
+// MaxComponentLen is the maximum length, in bytes,
 // of a path segment that is acceptable on all of the target file systems.
 // NTFS, ReFS and exFAT use UTF-16 code points  rather than bytes,
 // but a string of at most 255 UTF-8 bytes cannot exceed 255 UTF-16 code units,
 // so the difference doesn't matter in this case.
-const maxComponentLen = 255
+const MaxComponentLen = 255
 
 // maxExtLen bounds what is treated as an extension when a name has to be shortened.
 // Beyond this, a trailing ".something" is  most likely part of the title.
@@ -56,7 +56,7 @@ func Component(s string) (string, bool) {
 	if s == "" {
 		return "", false
 	}
-	budget := maxComponentLen
+	budget := MaxComponentLen
 	// Leave room for the underscore escapeReserved will add,
 	// so that escaping cannot push a truncated name back over the limit.
 	if isReserved(s) {
@@ -64,7 +64,7 @@ func Component(s string) (string, bool) {
 	}
 	if len(s) > budget {
 		// Truncation only ever cuts the tail, so it cannot turn an unreserved name into a reserved one:
-		// it leaves at least maxComponentLen - maxExtLen - 1 bytes of stem,
+		// it leaves at least MaxComponentLen - maxExtLen - 1 bytes of stem,
 		// which is far more than any device name.
 		s = trimEdges(truncate(s, budget))
 		if s == "" {
