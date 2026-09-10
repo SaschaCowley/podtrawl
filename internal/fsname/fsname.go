@@ -66,7 +66,7 @@ func Component(s string) (string, bool) {
 		// Truncation only ever cuts the tail, so it cannot turn an unreserved name into a reserved one:
 		// it leaves at least MaxComponentLen - maxExtLen - 1 bytes of stem,
 		// which is far more than any device name.
-		s = trimEdges(truncate(s, budget))
+		s = trimEdges(shorten(s, budget))
 		if s == "" {
 			return "", false
 		}
@@ -128,10 +128,10 @@ func escapeReserved(name string) string {
 	return stem + "_" + name[len(stem):]
 }
 
-// truncate shortens name to at most max bytes,
+// shorten cuts name down to at most max bytes,
 // cutting the stem rather than the extension
 // so that the file stays recognisable to whatever plays it.
-func truncate(name string, max int) string {
+func shorten(name string, max int) string {
 	if len(name) <= max {
 		return name
 	}
@@ -146,6 +146,8 @@ func truncate(name string, max int) string {
 // truncateBytes cuts s to at most max bytes,
 // ensuring that the cut happens at a  rune boundary
 // so that the result remains valid UTF-8.
+// A rune that ends exactly on the cut is kept,
+// so no more is given up than the limit demands.
 func truncateBytes(s string, max int) string {
 	if len(s) <= max {
 		return s

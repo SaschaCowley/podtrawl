@@ -78,6 +78,12 @@ func TestComponent(t *testing.T) {
 			true,
 		},
 		{
+			"too long and three-byte",
+			strings.Repeat("日", 100),
+			strings.Repeat("日", 85),
+			true,
+		},
+		{
 			"too long and reserved",
 			"NUL." + strings.Repeat("a", 300),
 			"NUL_." + strings.Repeat("a", 250),
