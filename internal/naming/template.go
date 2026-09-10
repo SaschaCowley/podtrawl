@@ -161,5 +161,5 @@ var funcs template.FuncMap = template.FuncMap{
 // Default name templates.
 const (
 	DefaultDirname  = `{{ sanitizeOr .Feed.Title (printf "show-%s" (shorthash .Feed.Url)) }}`
-	DefaultFilename = `{{ sanitizeOr .Episode.Filename (printf "episode-%s" (shorthash .Episode.Url)) }}`
+	DefaultFilename = `{{ sanitize (printf "%s%s" (or (sanitize .Episode.Stem) (printf "episode-%s" (shorthash .Episode.Url))) .Episode.Ext) }}`
 )

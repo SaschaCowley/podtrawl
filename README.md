@@ -103,7 +103,7 @@ Rendered once per feed, with access to the following metadata:
 
 Go template specifying the file to which an episode is written, under its feed's `dirname`.
 Must be a relative path.
-Defaults to `{{ sanitizeOr .Episode.Filename (printf "episode-%s" (shorthash .Episode.Url)) }}`.
+Defaults to `{{ sanitize (printf "%s%s" (or (sanitize .Episode.Stem) (printf "episode-%s" (shorthash .Episode.Url))) .Episode.Ext) }}`.
 
 Rendered per episode, with access to the same metadata as `dirname`, plus:
 

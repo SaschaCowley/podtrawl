@@ -428,6 +428,26 @@ func TestAvailableIncrementLongName(t *testing.T) {
 	}
 }
 
+func TestAvailableIncrementLongNameUnsanitized(t *testing.T) {
+	dir := t.TempDir()
+	f := resolveOne(t, &config.Config{Feeds: []config.Feed{{
+		Url:    feedUrl,
+		Common: config.Common{Existing: new("increment"), Sanitize: new(false)},
+	}}})
+	long := strings.Repeat("a", fsname.MaxComponentLen-len(".mp3")) + ".mp3"
+	dest := touch(t, filepath.Join(dir, long))
+	got, free, err := f.available(dest)
+	if err == nil {
+		t.Fatalf("available(<long>) = %q, %t, nil, want an error", got, free)
+	}
+	if got != "" || free {
+		t.Errorf("available(<long>) = %q, %t alongside an error, want \"\", false", got, free)
+	}
+	if want := fmt.Sprintf("%d bytes", len(naming.Numbered(long, 1, false))); !strings.Contains(err.Error(), want) {
+		t.Errorf("available(<long>) = _, _, %v, want an error reporting %s", err, want)
+	}
+}
+
 func TestResolveExistingPrecedence(t *testing.T) {
 	tests := []struct {
 		name           string

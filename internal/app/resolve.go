@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"ssch.cc/podtrawl/internal/config"
+	"ssch.cc/podtrawl/internal/fsname"
 	"ssch.cc/podtrawl/internal/naming"
 )
 
@@ -109,7 +110,7 @@ func (f resolvedFeed) available(dest string) (string, bool, error) {
 	if _, err := os.Stat(dest); errors.Is(err, os.ErrNotExist) {
 		return dest, true, nil
 	} else if err != nil {
-		return "", false, err
+		return "", false, statErr(dest, err)
 	}
 	switch f.existing {
 	case naming.Skip:
@@ -123,11 +124,19 @@ func (f resolvedFeed) available(dest string) (string, bool, error) {
 			if _, err := os.Stat(numbered); errors.Is(err, os.ErrNotExist) {
 				return numbered, true, nil
 			} else if err != nil {
-				return "", false, err
+				return "", false, statErr(numbered, err)
 			}
 		}
 		return "", false, fmt.Errorf("no free name for %q after %d tries", dest, maxNumbered)
 	default:
 		return dest, false, fmt.Errorf("unsupported value of existing: %v", f.existing)
 	}
+}
+
+// statErr adds the length of a path's final segment to the error from statting it, if that length is over fsname.MaxComponentLen.
+func statErr(path string, err error) error {
+	if name := filepath.Base(path); len(name) > fsname.MaxComponentLen {
+		return fmt.Errorf("%w: %q is %d bytes, over the %d-byte limit for one name", err, name, len(name), fsname.MaxComponentLen)
+	}
+	return err
 }
