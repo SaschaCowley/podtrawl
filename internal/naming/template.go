@@ -145,9 +145,11 @@ func clean(path string, sanitize bool) (string, error) {
 	return filepath.Join(segments...), nil
 }
 
+// funcs are the functions available to name templates.
 var funcs template.FuncMap = template.FuncMap{
-	"shorthash":  ShortHash,
-	"sanitize":   func(s string) string { return fsname.ComponentOr(s, "_") },
+	"shorthash": ShortHash,
+	// sanitize gives the empty string when nothing usable is left, so that templates can chain fallbacks with or.
+	"sanitize":   func(s string) string { name, _ := fsname.Component(s); return name },
 	"sanitizeOr": fsname.ComponentOr,
 	"date":       func(layout string, t time.Time) string { return t.Format(layout) },
 	"lower":      strings.ToLower,

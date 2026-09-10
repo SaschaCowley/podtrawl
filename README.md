@@ -164,8 +164,8 @@ In addition to those provided by `text/template`,
 
 | Function | Description |
 | --- | --- |
-| `sanitize s` | Make `s` safe as a single path component, replacing path separators and applying the same rules as the `sanitize` option. Gives `_` if nothing is left. |
-| `sanitizeOr s fallback` | As `sanitize`, but uses `fallback` when `s` yields nothing. |
+| `sanitize s` | Make `s` safe as a single path component, replacing path separators and applying the same rules as the `sanitize` option. Gives the empty string if nothing is left. |
+| `sanitizeOr s fallback` | As `sanitize`, but uses `fallback` when `s` yields nothing. If used, `fallback` is sanitized too. If `fallback` is also unusable, gives `_`. |
 | `shorthash s` | A short, stable, name-safe digest of `s`. Uses the non-cryptographic 64-bit FNV-1a hash function. |
 | `date layout t` | Format a time using a [Go layout](https://pkg.go.dev/time#pkg-constants), such as `2006-01-02`. |
 | `lower s`, `upper s` | Change case. |
