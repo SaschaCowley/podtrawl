@@ -18,12 +18,12 @@ import (
 // replacement stands in for any rune that cannot appear in a portable name.
 const replacement = '-'
 
-// maxComponentLen is the maximum length, in bytes,
+// MaxComponentLen is the maximum length, in bytes,
 // of a path segment that is acceptable on all of the target file systems.
 // NTFS, ReFS and exFAT use UTF-16 code points  rather than bytes,
 // but a string of at most 255 UTF-8 bytes cannot exceed 255 UTF-16 code units,
 // so the difference doesn't matter in this case.
-const maxComponentLen = 255
+const MaxComponentLen = 255
 
 // maxExtLen bounds what is treated as an extension when a name has to be shortened.
 // Beyond this, a trailing ".something" is  most likely part of the title.
@@ -56,7 +56,7 @@ func Component(s string) (string, bool) {
 	if s == "" {
 		return "", false
 	}
-	budget := maxComponentLen
+	budget := MaxComponentLen
 	// Leave room for the underscore escapeReserved will add,
 	// so that escaping cannot push a truncated name back over the limit.
 	if isReserved(s) {
@@ -64,9 +64,9 @@ func Component(s string) (string, bool) {
 	}
 	if len(s) > budget {
 		// Truncation only ever cuts the tail, so it cannot turn an unreserved name into a reserved one:
-		// it leaves at least maxComponentLen - maxExtLen - 1 bytes of stem,
+		// it leaves at least MaxComponentLen - maxExtLen - 1 bytes of stem,
 		// which is far more than any device name.
-		s = trimEdges(truncate(s, budget))
+		s = trimEdges(shorten(s, budget))
 		if s == "" {
 			return "", false
 		}
@@ -128,10 +128,10 @@ func escapeReserved(name string) string {
 	return stem + "_" + name[len(stem):]
 }
 
-// truncate shortens name to at most max bytes,
+// shorten cuts name down to at most max bytes,
 // cutting the stem rather than the extension
 // so that the file stays recognisable to whatever plays it.
-func truncate(name string, max int) string {
+func shorten(name string, max int) string {
 	if len(name) <= max {
 		return name
 	}
@@ -146,6 +146,8 @@ func truncate(name string, max int) string {
 // truncateBytes cuts s to at most max bytes,
 // ensuring that the cut happens at a  rune boundary
 // so that the result remains valid UTF-8.
+// A rune that ends exactly on the cut is kept,
+// so no more is given up than the limit demands.
 func truncateBytes(s string, max int) string {
 	if len(s) <= max {
 		return s
