@@ -44,7 +44,7 @@ func CLI(args []string) int {
 }
 
 // run downloads every new episode of every configured feed.
-func run(ctx context.Context, log *slog.Logger, opts *flags) error {
+func run(ctx context.Context, log *slog.Logger, opts *flags) (err error) {
 	conf, err := config.Get(opts.configPath, log)
 	if err != nil {
 		return err
@@ -60,6 +60,16 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) error {
 	cache, err := newCache(log)
 	if err != nil {
 		return err
+	}
+	if !opts.dryRun {
+		defer func() {
+			if cerr := cache.Save(); cerr != nil {
+				log.Error("save cache", "err", cerr)
+				if err == nil {
+					err = cerr
+				}
+			}
+		}()
 	}
 	root, err := rootDir(conf)
 	if err != nil {
@@ -154,10 +164,12 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) error {
 				continue
 			}
 			cache.SetDownloaded(f.url, key, true)
+		}
+		if !opts.dryRun {
 			// An unsaved cache means we might have to do more work later,
 			// but shouldn't mean we abandon all the remaining downloads.
 			if err := cache.Save(); err != nil {
-				fLog.Error("save cache", "url", enclosure.Url, "err", err)
+				fLog.Error("save cache", "err", err)
 				failures++
 			}
 		}

@@ -2,6 +2,7 @@ package cache
 
 import (
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,10 +14,10 @@ func sampleCache() *Cache {
 		cacheFile: cacheFile{
 			Feeds: map[string]*feed{
 				"url1": &feed{
-					Downloaded: []string{"guid1"},
+					Downloaded: strSet{"guid1": {}},
 				},
 				"url2": &feed{
-					Downloaded: []string{"guid2"},
+					Downloaded: strSet{"guid2": {}},
 				},
 			},
 		},
@@ -73,9 +74,9 @@ func TestSetDownloaded(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cache := tt.cache()
 			feed := cache.cacheFile.Feeds[tt.url]
-			var oldGuids, newGuids []string
+			var oldGuids, newGuids strSet
 			if feed != nil {
-				oldGuids = slices.Clone(feed.Downloaded)
+				oldGuids = maps.Clone(feed.Downloaded)
 			} else {
 				oldGuids = nil
 			}
@@ -88,7 +89,7 @@ func TestSetDownloaded(t *testing.T) {
 			} else {
 				newGuids = nil
 			}
-			if tt.downloaded == tt.prior && !slices.Equal(oldGuids, newGuids) {
+			if tt.downloaded == tt.prior && !maps.Equal(oldGuids, newGuids) {
 				t.Errorf("expected downloaded guids to be unchanged.\nold: %#v\nnew: %#v", oldGuids, newGuids)
 			}
 			if feed == nil && !tt.downloaded {
@@ -164,4 +165,47 @@ func TestNewCorruptCache(t *testing.T) {
 	if !reopened.Downloaded("url1", "guid1") {
 		t.Errorf(`Cache.Downloaded("url1", "guid1") = false after reopening, want true`)
 	}
+}
+
+// noCacheFile asserts that a cache file does not exist.
+func noCacheFile(t *testing.T, dir, after string) {
+	t.Helper()
+	if _, err := os.Stat(filepath.Join(dir, cacheFileName)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("%s wrote %s, want no write (stat: %v)", after, cacheFileName, err)
+	}
+}
+
+func TestSaveSkipsUnchanged(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "podtrawl")
+	cache, err := New(&dir)
+	if err != nil {
+		t.Fatalf("New(%q) = %v", dir, err)
+	}
+	if err := cache.Save(); err != nil {
+		t.Fatalf("Cache.Save() on an unchanged cache = %v", err)
+	}
+	noCacheFile(t, dir, "Cache.Save() on a cache that has never changed")
+
+	cache.SetDownloaded("url1", "guid1", true)
+	if err := cache.Save(); err != nil {
+		t.Fatalf("Cache.Save() = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, cacheFileName)); err != nil {
+		t.Fatalf("stat %s after a save that changed something = %v", cacheFileName, err)
+	}
+
+	// Delete the cache file so that, if saving writes, it is easily observable.
+	if err := os.Remove(filepath.Join(dir, cacheFileName)); err != nil {
+		t.Fatal(err)
+	}
+	if err := cache.Save(); err != nil {
+		t.Fatalf("Cache.Save() straight after a successful save = %v", err)
+	}
+	noCacheFile(t, dir, "a second Cache.Save() with nothing changed in between")
+
+	cache.SetDownloaded("url1", "guid1", true)
+	if err := cache.Save(); err != nil {
+		t.Fatalf("Cache.Save() after a redundant SetDownloaded = %v", err)
+	}
+	noCacheFile(t, dir, "Cache.Save() after a redundant SetDownloaded")
 }

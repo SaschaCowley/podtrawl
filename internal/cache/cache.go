@@ -18,7 +18,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
 )
 
 const cacheFileName = "cache.json"
@@ -33,12 +32,13 @@ type cacheFile struct {
 }
 
 type feed struct {
-	Downloaded []string `json:"downloaded,omitempty"`
+	Downloaded strSet `json:"downloaded,omitempty"`
 }
 
 type Cache struct {
 	cacheFile cacheFile
 	path      string
+	dirty     bool
 }
 
 // New reads the cache in dir,
@@ -84,6 +84,9 @@ func New(dir *string) (*Cache, error) {
 // Replacing the file rather than overwriting it in place means an interrupted run
 // leaves the previous cache intact instead of a half-written one.
 func (c *Cache) Save() (err error) {
+	if !c.dirty {
+		return nil
+	}
 	out, err := json.Marshal(c.cacheFile)
 	if err != nil {
 		return err
@@ -102,7 +105,9 @@ func (c *Cache) Save() (err error) {
 		if err == nil {
 			err = os.Rename(tmpPath, c.path)
 		}
-		if err != nil {
+		if err == nil {
+			c.dirty = false
+		} else {
 			os.Remove(tmpPath)
 		}
 	}()
@@ -117,7 +122,8 @@ func (c *Cache) Downloaded(url, guid string) bool {
 	if feed == nil {
 		return false
 	}
-	return slices.Contains(feed.Downloaded, guid)
+	_, downloaded := feed.Downloaded[guid]
+	return downloaded
 }
 
 func (c *Cache) SetDownloaded(url, guid string, downloaded bool) {
@@ -132,17 +138,16 @@ func (c *Cache) SetDownloaded(url, guid string, downloaded bool) {
 		}
 		c.cacheFile.Feeds[url] = f
 	}
-	guids := f.Downloaded
-	i := slices.Index(guids, guid)
-	if downloaded && i == -1 {
-		guids = append(guids, guid)
-	} else if !downloaded && i >= 0 {
-		if len(guids) > 1 {
-			guids[i] = guids[len(guids)-1]
-		}
-		guids = guids[:len(guids)-1]
-	} else {
+	if _, exists := f.Downloaded[guid]; exists == downloaded {
 		return
 	}
-	c.cacheFile.Feeds[url].Downloaded = guids
+	c.dirty = true
+	if !downloaded {
+		delete(f.Downloaded, guid)
+		return
+	}
+	if f.Downloaded == nil {
+		f.Downloaded = make(strSet)
+	}
+	f.Downloaded[guid] = struct{}{}
 }
