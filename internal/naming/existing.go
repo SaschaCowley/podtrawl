@@ -35,12 +35,31 @@ func ParseExisting(s string) (Existing, error) {
 }
 
 func (e Existing) String() string {
+	if name, err := e.MarshalText(); err != nil {
+		return fmt.Sprintf("Existing(%d)", int(e))
+	} else {
+		return string(name)
+	}
+}
+
+func (e *Existing) UnmarshalText(text []byte) error {
+	existing, err := ParseExisting(string(text))
+	if err != nil {
+		return err
+	}
+	*e = existing
+	return nil
+}
+
+func (e Existing) MarshalText() (text []byte, err error) {
 	for name, v := range existingNames {
 		if v == e {
-			return name
+			text = []byte(name)
+			return
 		}
 	}
-	return fmt.Sprintf("Existing(%d)", int(e))
+	err = fmt.Errorf("unknown value: %d", int(e))
+	return
 }
 
 // Numbered appends n, parenthesized, to the stem of name.

@@ -24,7 +24,7 @@ type resolvedFeed struct {
 // resolve turns a config into the per-feed state a run needs.
 // Parses and validates templates so that failure happens upfront,
 // rather than in the middle of a run.
-func resolve(c *config.Config) ([]resolvedFeed, error) {
+func resolve(c *config.Config, opts *flags) ([]resolvedFeed, error) {
 	feeds := make([]resolvedFeed, 0, len(c.Feeds))
 	for _, f := range c.Feeds {
 		sanitize := setting(true, f.Sanitize, c.Defaults.Sanitize)
@@ -39,6 +39,9 @@ func resolve(c *config.Config) ([]resolvedFeed, error) {
 		existing, err := naming.ParseExisting(setting("increment", f.Existing, c.Defaults.Existing))
 		if err != nil {
 			return nil, fmt.Errorf("feed %q: existing: %w", f.Url, err)
+		}
+		if opts.existing != nil {
+			existing = *opts.existing
 		}
 		feeds = append(feeds, resolvedFeed{
 			url:      f.Url,

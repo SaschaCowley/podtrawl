@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strconv"
 	"testing"
+
+	"ssch.cc/podtrawl/internal/naming"
 )
 
 // defaultFlags is what parseArgs returns for an empty argument list.
@@ -28,6 +30,12 @@ func TestParseArgs(t *testing.T) {
 		{name: "config path may not be empty", args: []string{"--config", ""}, wantErr: true},
 		{name: "json is passed along", args: []string{"--json"}, change: func(f *flags) { f.json = true }},
 		{name: "dry run is passed along", args: []string{"-n"}, change: func(f *flags) { f.dryRun = true }},
+		{name: "no cache is passed along", args: []string{"--no-cache"}, change: func(f *flags) { f.noCache = true }},
+		{name: "redownload is passed along", args: []string{"--redownload"}, change: func(f *flags) { f.redownload = true }},
+		{name: "no cache and redownload are mutually exclusive", args: []string{"--no-cache", "--redownload"}, wantErr: true},
+		{name: "existing is passed along", args: []string{"--existing", "skip"}, change: func(f *flags) { f.existing = new(naming.Skip) }},
+		{name: "explicit existing=increment is passed along", args: []string{"--existing", "increment"}, change: func(f *flags) { f.existing = new(naming.Increment) }},
+		{name: "invalid value for existing", args: []string{"--existing", "clobber"}, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -67,6 +75,10 @@ func fmtFlags(f *flags) string {
 	if f.configPath != nil {
 		configPath = strconv.Quote(*f.configPath)
 	}
-	return fmt.Sprintf("{configPath:%s, dryRun:%t, json:%t, verbosity:%d}",
-		configPath, f.dryRun, f.json, f.verbosity)
+	existing := "nil"
+	if f.existing != nil {
+		existing = f.existing.String()
+	}
+	return fmt.Sprintf("{configPath:%s, dryRun:%t, existing:%s, json:%t, noCache:%t, redownload:%t, verbosity:%d}",
+		configPath, f.dryRun, existing, f.json, f.noCache, f.redownload, f.verbosity)
 }

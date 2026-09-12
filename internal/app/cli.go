@@ -53,17 +53,17 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) (err error) {
 		log.Warn("config has no feeds")
 		return nil
 	}
-	feeds, err := resolve(conf)
+	feeds, err := resolve(conf, opts)
 	if err != nil {
 		return err
 	}
-	cache, err := newCache(log)
+	c, err := newCache(log, opts)
 	if err != nil {
 		return err
 	}
 	if !opts.dryRun {
 		defer func() {
-			if cerr := cache.Save(); cerr != nil {
+			if cerr := c.Save(); cerr != nil {
 				log.Error("save cache", "err", cerr)
 				if err == nil {
 					err = cerr
@@ -117,7 +117,7 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) (err error) {
 			}
 			enclosure := item.Enclosures[0]
 			key := episodeKey(item, enclosure)
-			cached := cache.Downloaded(f.url, key)
+			cached := c.Downloaded(f.url, key)
 			if cached && !opts.dryRun {
 				fLog.Debug("already downloaded", "episode", key)
 				continue
@@ -163,12 +163,12 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) (err error) {
 				failures++
 				continue
 			}
-			cache.SetDownloaded(f.url, key, true)
+			c.SetDownloaded(f.url, key, true)
 		}
 		if !opts.dryRun {
 			// An unsaved cache means we might have to do more work later,
 			// but shouldn't mean we abandon all the remaining downloads.
-			if err := cache.Save(); err != nil {
+			if err := c.Save(); err != nil {
 				fLog.Error("save cache", "err", err)
 				failures++
 			}
@@ -184,8 +184,19 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) (err error) {
 // reporting a cache that could not be read only as a warning.
 // Starting from an empty cache costs a re-download;
 // stopping here would cost the whole run.
-func newCache(logger *slog.Logger) (*cache.Cache, error) {
-	c, err := cache.New(nil)
+func newCache(logger *slog.Logger, opts *flags) (cache.Cache, error) {
+	if opts.noCache {
+		return cache.NopCache{}, nil
+	}
+	var (
+		c   cache.Cache
+		err error
+	)
+	if opts.redownload {
+		c, err = cache.NewWronly(nil)
+	} else {
+		c, err = cache.New(nil)
+	}
 	if err != nil {
 		if !errors.Is(err, cache.ErrCorrupt) {
 			return nil, err

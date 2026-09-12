@@ -30,9 +30,13 @@ func show(title string) naming.FeedOnly {
 }
 
 // resolveOne resolves a config of exactly one feed.
-func resolveOne(t *testing.T, c *config.Config) resolvedFeed {
+func resolveOne(t *testing.T, c *config.Config, f *flags) resolvedFeed {
 	t.Helper()
-	feeds, err := resolve(c)
+	if f == nil {
+		d := defaultFlags()
+		f = &d
+	}
+	feeds, err := resolve(c, f)
 	if err != nil {
 		t.Fatalf("resolve() = _, %v, want 1 feed, nil", err)
 	}
@@ -61,7 +65,7 @@ func TestResolvePrecedence(t *testing.T) {
 					Url:    feedUrl,
 					Common: config.Common{Dirname: tt.feed, Filename: tt.feed},
 				}},
-			})
+			}, nil)
 			m := meta("Show", "https://cdn.example.com/ep12.mp3")
 			gotDirname, err := f.dirname.Render(naming.FeedOnly{Feed: m.Feed})
 			if err != nil {
@@ -102,7 +106,7 @@ func TestResolveSanitizePrecedence(t *testing.T) {
 					Url:    feedUrl,
 					Common: config.Common{Dirname: new(dirname), Sanitize: tt.feed},
 				}},
-			})
+			}, nil)
 			got, err := f.dirname.Render(show("Show: One"))
 			if err != nil {
 				t.Fatalf("dirname.Render() = _, %v, want %q, nil", err, tt.want)
@@ -132,7 +136,8 @@ func TestResolveRejectsBadTemplates(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			feeds, err := resolve(&config.Config{Feeds: []config.Feed{{Url: feedUrl, Common: tt.feed}}})
+			opts := defaultFlags()
+			feeds, err := resolve(&config.Config{Feeds: []config.Feed{{Url: feedUrl, Common: tt.feed}}}, &opts)
 			if err == nil {
 				t.Fatalf("resolve() = %v, nil, want nil, an error", feeds)
 			}
@@ -183,7 +188,7 @@ func TestResolveAcceptsEpisodesInFilenames(t *testing.T) {
 	const filename = `{{.Episode.PubDate | date "2006"}}/{{sanitize .Episode.Title}}{{.Episode.Ext}}`
 	f := resolveOne(t, &config.Config{
 		Feeds: []config.Feed{{Url: feedUrl, Common: config.Common{Filename: new(filename)}}},
-	})
+	}, nil)
 	m := meta("Show", "https://cdn.example.com/ep12.mp3")
 	m.Episode.Title = "Episode 12"
 	m.Episode.PubDate = time.Date(2026, time.August, 30, 9, 0, 0, 0, time.UTC)
@@ -212,7 +217,7 @@ func TestShowDir(t *testing.T) {
 			if tt.dirname != "" {
 				common.Dirname = new(tt.dirname)
 			}
-			f := resolveOne(t, &config.Config{Feeds: []config.Feed{{Url: feedUrl, Common: common}}})
+			f := resolveOne(t, &config.Config{Feeds: []config.Feed{{Url: feedUrl, Common: common}}}, nil)
 			got, err := f.showDir(root, show(tt.title))
 			if err != nil {
 				t.Fatalf("showDir() = _, %v, want a directory, nil", err)
@@ -231,7 +236,7 @@ func TestShowDirReportsAnUnusableName(t *testing.T) {
 	f := resolveOne(t, &config.Config{Feeds: []config.Feed{{
 		Url:    feedUrl,
 		Common: config.Common{Dirname: new("{{.Feed.Title}}")},
-	}}})
+	}}}, nil)
 	got, err := f.showDir(t.TempDir(), show(""))
 	if err == nil {
 		t.Fatalf("showDir() for a feed with no title = %q, nil, want an error", got)
@@ -257,7 +262,7 @@ func TestEpisodeDest(t *testing.T) {
 			if tt.filename != "" {
 				common.Filename = new(tt.filename)
 			}
-			f := resolveOne(t, &config.Config{Feeds: []config.Feed{{Url: feedUrl, Common: common}}})
+			f := resolveOne(t, &config.Config{Feeds: []config.Feed{{Url: feedUrl, Common: common}}}, nil)
 			m := meta("Show", tt.episodeUrl)
 			m.Episode.PubDate = time.Date(2026, time.August, 30, 9, 0, 0, 0, time.UTC)
 			got, err := f.episodeDest(dir, m)
@@ -278,7 +283,7 @@ func TestEpisodeDestReportsAnUnusableName(t *testing.T) {
 	f := resolveOne(t, &config.Config{Feeds: []config.Feed{{
 		Url:    feedUrl,
 		Common: config.Common{Filename: new("{{.Episode.Title}}")},
-	}}})
+	}}}, nil)
 	got, err := f.episodeDest(t.TempDir(), meta("Show", "https://cdn.example.com/ep12.mp3"))
 	if err == nil {
 		t.Fatalf("episodeDest() for an episode with no title = %q, nil, want an error", got)
@@ -305,7 +310,7 @@ func withExisting(t *testing.T, policy string) resolvedFeed {
 	return resolveOne(t, &config.Config{Feeds: []config.Feed{{
 		Url:    feedUrl,
 		Common: config.Common{Existing: new(policy)},
-	}}})
+	}}}, nil)
 }
 
 func TestAvailableNoConflict(t *testing.T) {
@@ -433,7 +438,7 @@ func TestAvailableIncrementLongNameUnsanitized(t *testing.T) {
 	f := resolveOne(t, &config.Config{Feeds: []config.Feed{{
 		Url:    feedUrl,
 		Common: config.Common{Existing: new("increment"), Sanitize: new(false)},
-	}}})
+	}}}, nil)
 	long := strings.Repeat("a", fsname.MaxComponentLen-len(".mp3")) + ".mp3"
 	dest := touch(t, filepath.Join(dir, long))
 	got, free, err := f.available(dest)
@@ -452,19 +457,26 @@ func TestResolveExistingPrecedence(t *testing.T) {
 	tests := []struct {
 		name           string
 		feed, defaults *string
+		cli            *naming.Existing
 		want           naming.Existing
 	}{
-		{"built-in", nil, nil, naming.Increment},
-		{"defaults", nil, new("skip"), naming.Skip},
-		{"feed", new("replace"), nil, naming.Replace},
-		{"feed over defaults", new("replace"), new("skip"), naming.Replace},
+		{"built-in", nil, nil, nil, naming.Increment},
+		{"defaults", nil, new("skip"), nil, naming.Skip},
+		{"feed", new("replace"), nil, nil, naming.Replace},
+		{"feed over defaults", new("replace"), new("skip"), nil, naming.Replace},
+		{"command line", nil, nil, new(naming.Skip), naming.Skip},
+		{"command line over defaults", nil, new("skip"), new(naming.Replace), naming.Replace},
+		{"command line over feed", new("skip"), nil, new(naming.Replace), naming.Replace},
+		{"command line over feed and defaults", new("skip"), new("replace"), new(naming.Increment), naming.Increment},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			opts := defaultFlags()
+			opts.existing = tt.cli
 			f := resolveOne(t, &config.Config{
 				Defaults: config.Common{Existing: tt.defaults},
 				Feeds:    []config.Feed{{Url: feedUrl, Common: config.Common{Existing: tt.feed}}},
-			})
+			}, &opts)
 			if f.existing != tt.want {
 				t.Errorf("resolve() gave existing = %v, want %v", f.existing, tt.want)
 			}
@@ -473,16 +485,29 @@ func TestResolveExistingPrecedence(t *testing.T) {
 }
 
 func TestResolveRejectsUnknownExisting(t *testing.T) {
-	feeds, err := resolve(&config.Config{Feeds: []config.Feed{{
-		Url:    feedUrl,
-		Common: config.Common{Existing: new("clobber")},
-	}}})
-	if err == nil {
-		t.Fatalf("resolve() = %v, nil, want an error", feeds)
+	tests := []struct {
+		name string
+		cli  *naming.Existing
+	}{
+		{"no command line policy", nil},
+		{"overridden on the command line", new(naming.Skip)},
 	}
-	for _, want := range []string{"existing", feedUrl, "clobber"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("resolve() = _, %v, want an error naming %q", err, want)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := defaultFlags()
+			opts.existing = tt.cli
+			feeds, err := resolve(&config.Config{Feeds: []config.Feed{{
+				Url:    feedUrl,
+				Common: config.Common{Existing: new("clobber")},
+			}}}, &opts)
+			if err == nil {
+				t.Fatalf("resolve() = %v, nil, want an error", feeds)
+			}
+			for _, want := range []string{"existing", feedUrl, "clobber"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("resolve() = _, %v, want an error naming %q", err, want)
+				}
+			}
+		})
 	}
 }

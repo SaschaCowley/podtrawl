@@ -9,8 +9,8 @@ import (
 	"testing"
 )
 
-func sampleCache() *Cache {
-	return &Cache{
+func sampleCache() *FsCache {
+	return &FsCache{
 		cacheFile: cacheFile{
 			Feeds: map[string]*feed{
 				"url1": &feed{
@@ -24,14 +24,14 @@ func sampleCache() *Cache {
 	}
 }
 
-func emptyCache() *Cache {
-	return &Cache{}
+func emptyCache() *FsCache {
+	return &FsCache{}
 }
 
 func TestDownloaded(t *testing.T) {
 	tests := []struct {
 		name  string
-		cache func() *Cache
+		cache func() *FsCache
 		url   string
 		guid  string
 		want  bool
@@ -55,7 +55,7 @@ func TestDownloaded(t *testing.T) {
 func TestSetDownloaded(t *testing.T) {
 	tests := []struct {
 		name       string
-		cache      func() *Cache
+		cache      func() *FsCache
 		url        string
 		guid       string
 		downloaded bool
