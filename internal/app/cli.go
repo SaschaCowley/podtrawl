@@ -14,10 +14,10 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/spf13/pflag"
 
-	"ssch.cc/podtrawl/internal/cache"
 	"ssch.cc/podtrawl/internal/clilog"
 	"ssch.cc/podtrawl/internal/config"
 	"ssch.cc/podtrawl/internal/feed"
+	"ssch.cc/podtrawl/internal/ledger"
 	"ssch.cc/podtrawl/internal/naming"
 )
 
@@ -184,21 +184,21 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) (err error) {
 // reporting a cache that could not be read only as a warning.
 // Starting from an empty cache costs a re-download;
 // stopping here would cost the whole run.
-func newCache(logger *slog.Logger, opts *flags) (cache.Cache, error) {
+func newCache(logger *slog.Logger, opts *flags) (ledger.Cache, error) {
 	if opts.noCache {
-		return cache.NopCache{}, nil
+		return ledger.NopCache{}, nil
 	}
 	var (
-		c   cache.Cache
+		c   ledger.Cache
 		err error
 	)
 	if opts.redownload {
-		c, err = cache.NewWronly(nil)
+		c, err = ledger.NewWronly(nil)
 	} else {
-		c, err = cache.New(nil)
+		c, err = ledger.New(nil)
 	}
 	if err != nil {
-		if !errors.Is(err, cache.ErrCorrupt) {
+		if !errors.Is(err, ledger.ErrCorrupt) {
 			return nil, err
 		}
 		logger.Warn("cache unreadable, starting cold", "err", err)

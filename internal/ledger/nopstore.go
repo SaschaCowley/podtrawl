@@ -1,4 +1,4 @@
-package cache
+package ledger
 
 // NopCache never persists anything, and always behaves like a cold cache.
 type NopCache struct{}

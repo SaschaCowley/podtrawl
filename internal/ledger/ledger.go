@@ -1,6 +1,6 @@
 // Package cache records which podcast episodes have already been downloaded.
 // The cache exists only to save work, so implementations should never fail a run on their own.
-package cache
+package ledger
 
 type Cache interface {
 	// Save persists the current state of the cache.
