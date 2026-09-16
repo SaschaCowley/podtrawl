@@ -57,7 +57,13 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) (err error) {
 	if err != nil {
 		return err
 	}
-	l, err := newLedger(log, opts)
+	root, err := rootDir(conf)
+	if err != nil {
+		return err
+	}
+	log.Debug("download root", "dir", root)
+	// The ledger describes this root in particular, so it is read from it.
+	l, err := newLedger(log, opts, root)
 	if err != nil {
 		return err
 	}
@@ -71,11 +77,6 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) (err error) {
 			}
 		}()
 	}
-	root, err := rootDir(conf)
-	if err != nil {
-		return err
-	}
-	log.Debug("download root", "dir", root)
 	// A failing feed or episode shouldn't stop the run,
 	// but it must still be visible in the exit code so a scheduled run can be seen to have failed.
 	var failures int
@@ -180,12 +181,12 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) (err error) {
 	return nil
 }
 
-// newLedger creates the download ledger,
+// newLedger creates the download ledger for the download root at root,
 // reporting a ledger that could not be read only as a warning.
 // Starting from an empty ledger costs a re-download;
 // stopping here would cost the whole run.
-func newLedger(logger *slog.Logger, opts *flags) (ledger.Store, error) {
-	if opts.noCache {
+func newLedger(logger *slog.Logger, opts *flags, root string) (ledger.Store, error) {
+	if opts.noLedger {
 		return ledger.NopStore{}, nil
 	}
 	var (
@@ -193,9 +194,9 @@ func newLedger(logger *slog.Logger, opts *flags) (ledger.Store, error) {
 		err error
 	)
 	if opts.redownload {
-		l, err = ledger.NewWronly(nil)
+		l, err = ledger.NewWronly(root)
 	} else {
-		l, err = ledger.New(nil)
+		l, err = ledger.New(root)
 	}
 	if err != nil {
 		if !errors.Is(err, ledger.ErrCorrupt) {

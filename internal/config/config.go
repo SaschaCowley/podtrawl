@@ -37,8 +37,8 @@ func load(path string) (*Config, error) {
 		return nil, err
 	}
 	// Each feed may only be declared once.
-	// The cache is keyed by feed URL,
-	// so allowing duplicate entries would cause cache collisions.
+	// The ledger is keyed by feed URL,
+	// so allowing duplicate entries would cause collisions.
 	seen := make(map[string]bool, len(c.Feeds))
 	for _, f := range c.Feeds {
 		if seen[f.Url] {

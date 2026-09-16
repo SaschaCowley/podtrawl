@@ -8,9 +8,11 @@ type WronlyStore struct {
 	fsStore FsStore
 }
 
-func NewWronly(dir *string) (*WronlyStore, error) {
+// NewWronly opens the ledger belonging to the download root at root,
+// on the same terms as [New], and then declines to read from it.
+func NewWronly(root string) (*WronlyStore, error) {
 	s := &WronlyStore{}
-	err := s.fsStore.load(dir)
+	err := s.fsStore.load(root)
 	if err != nil && !errors.Is(err, ErrCorrupt) {
 		return nil, err
 	}

@@ -12,7 +12,7 @@ type flags struct {
 	json       bool
 	configPath *string
 	dryRun     bool
-	noCache    bool
+	noLedger   bool
 	redownload bool
 	existing   *naming.Existing
 }
@@ -26,7 +26,7 @@ func parseArgs(args []string) (*flags, error) {
 	fs.TextVar(&existing, "existing", naming.Increment, "policy for file conflicts")
 	// Behaviour
 	fs.BoolVarP(&f.dryRun, "dry-run", "n", false, "report what would be downloaded, without downloading it")
-	fs.BoolVar(&f.noCache, "no-cache", false, "do not read or write the cache")
+	fs.BoolVar(&f.noLedger, "no-ledger", false, "do not read or write the ledger")
 	fs.BoolVar(&f.redownload, "redownload", false, "redownload episodes that have previously been downloaded")
 	// Logging
 	verbose := fs.CountP("verbose", "v", "produce more output")
@@ -48,8 +48,8 @@ func parseArgs(args []string) (*flags, error) {
 		}
 		f.configPath = configPath
 	}
-	if fs.Changed("no-cache") && fs.Changed("redownload") {
-		return nil, errors.New("the no-cache and redownload flags are mutually exclusive")
+	if fs.Changed("no-ledger") && fs.Changed("redownload") {
+		return nil, errors.New("the no-ledger and redownload flags are mutually exclusive")
 	}
 	if fs.Changed("existing") {
 		f.existing = &existing

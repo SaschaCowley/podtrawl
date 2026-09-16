@@ -102,11 +102,11 @@ func TestSetDownloaded(t *testing.T) {
 }
 
 func TestSaveRoundTrip(t *testing.T) {
-	// A directory that isn't there yet also exercises the MkdirAll in New.
-	dir := filepath.Join(t.TempDir(), "podtrawl")
-	ledger, err := New(&dir)
+	// A root that isn't there yet also exercises the MkdirAll in Save.
+	root := filepath.Join(t.TempDir(), "library")
+	ledger, err := New(root)
 	if err != nil {
-		t.Fatalf("New(%q) = %v", dir, err)
+		t.Fatalf("New(%q) = %v", root, err)
 	}
 	if ledger.Downloaded("url1", "guid1") {
 		t.Errorf(`FsStore.Downloaded("url1", "guid1") = true in a ledger that does not exist yet, want false`)
@@ -115,15 +115,15 @@ func TestSaveRoundTrip(t *testing.T) {
 	if err := ledger.Save(); err != nil {
 		t.Fatalf("FsStore.Save() = %v", err)
 	}
-	reopened, err := New(&dir)
+	reopened, err := New(root)
 	if err != nil {
-		t.Fatalf("New(%q) after Save = %v", dir, err)
+		t.Fatalf("New(%q) after Save = %v", root, err)
 	}
 	if !reopened.Downloaded("url1", "guid1") {
 		t.Errorf(`FsStore.Downloaded("url1", "guid1") = false after reopening, want true`)
 	}
 	// Save renames a temporary file into place; none of them should survive it.
-	entries, err := os.ReadDir(dir)
+	entries, err := os.ReadDir(filepath.Join(root, ledgerDirName))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,19 +136,45 @@ func TestSaveRoundTrip(t *testing.T) {
 	}
 }
 
-func TestNewCorruptLedger(t *testing.T) {
-	dir := t.TempDir()
-	// A save that was interrupted before rename-in-place existed.
-	partial := []byte(`{"feeds":{"url1":{"downloaded":["guid1"`)
-	if err := os.WriteFile(filepath.Join(dir, ledgerFileName), partial, 0600); err != nil {
+func ledgerPath(root string) string {
+	return filepath.Join(root, ledgerDirName, ledgerFileName)
+}
+
+func writeLedger(t *testing.T, root string, data []byte) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(root, ledgerDirName), 0700); err != nil {
 		t.Fatal(err)
 	}
-	ledger, err := New(&dir)
+	if err := os.WriteFile(ledgerPath(root), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSaveLocation(t *testing.T) {
+	root := t.TempDir()
+	ledger, err := New(root)
+	if err != nil {
+		t.Fatalf("New(%q) = %v", root, err)
+	}
+	ledger.SetDownloaded("url1", "guid1", true)
+	if err := ledger.Save(); err != nil {
+		t.Fatalf("FsStore.Save() = %v", err)
+	}
+	if _, err := os.Stat(ledgerPath(root)); err != nil {
+		t.Errorf("stat %s after Save = %v, want the ledger to be there", ledgerPath(root), err)
+	}
+}
+
+func TestNewCorruptLedger(t *testing.T) {
+	root := t.TempDir()
+	// A save that was interrupted before rename-in-place existed.
+	writeLedger(t, root, []byte(`{"feeds":{"url1":{"downloaded":["guid1"`))
+	ledger, err := New(root)
 	if !errors.Is(err, ErrCorrupt) {
-		t.Errorf("New(%q) on an undecodable ledger = %v, want %v", dir, err, ErrCorrupt)
+		t.Errorf("New(%q) on an undecodable ledger = %v, want %v", root, err, ErrCorrupt)
 	}
 	if ledger == nil {
-		t.Fatalf("New(%q) on an undecodable ledger = nil, want a usable empty ledger", dir)
+		t.Fatalf("New(%q) on an undecodable ledger = nil, want a usable empty ledger", root)
 	}
 	if ledger.Downloaded("url1", "guid1") {
 		t.Errorf(`FsStore.Downloaded("url1", "guid1") = true, want false: nothing decoded is to be trusted`)
@@ -158,9 +184,9 @@ func TestNewCorruptLedger(t *testing.T) {
 	if err := ledger.Save(); err != nil {
 		t.Fatalf("FsStore.Save() = %v", err)
 	}
-	reopened, err := New(&dir)
+	reopened, err := New(root)
 	if err != nil {
-		t.Fatalf("New(%q) after saving over an undecodable ledger = %v", dir, err)
+		t.Fatalf("New(%q) after saving over an undecodable ledger = %v", root, err)
 	}
 	if !reopened.Downloaded("url1", "guid1") {
 		t.Errorf(`FsStore.Downloaded("url1", "guid1") = false after reopening, want true`)
@@ -168,44 +194,49 @@ func TestNewCorruptLedger(t *testing.T) {
 }
 
 // noLedgerFile asserts that a ledger file does not exist.
-func noLedgerFile(t *testing.T, dir, after string) {
+func noLedgerFile(t *testing.T, root, after string) {
 	t.Helper()
-	if _, err := os.Stat(filepath.Join(dir, ledgerFileName)); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(ledgerPath(root)); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("%s wrote %s, want no write (stat: %v)", after, ledgerFileName, err)
 	}
 }
 
 func TestSaveSkipsUnchanged(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "podtrawl")
-	ledger, err := New(&dir)
+	root := filepath.Join(t.TempDir(), "library")
+	ledger, err := New(root)
 	if err != nil {
-		t.Fatalf("New(%q) = %v", dir, err)
+		t.Fatalf("New(%q) = %v", root, err)
 	}
 	if err := ledger.Save(); err != nil {
 		t.Fatalf("FsStore.Save() on an unchanged ledger = %v", err)
 	}
-	noLedgerFile(t, dir, "FsStore.Save() on a ledger that has never changed")
+	noLedgerFile(t, root, "FsStore.Save() on a ledger that has never changed")
+	// A run that saves nothing leaves the root exactly as it found it,
+	// which for a dry run means not creating it at all.
+	if _, err := os.Stat(root); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("a ledger that has never changed created %s, want no write (stat: %v)", root, err)
+	}
 
 	ledger.SetDownloaded("url1", "guid1", true)
 	if err := ledger.Save(); err != nil {
 		t.Fatalf("FsStore.Save() = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, ledgerFileName)); err != nil {
+	if _, err := os.Stat(ledgerPath(root)); err != nil {
 		t.Fatalf("stat %s after a save that changed something = %v", ledgerFileName, err)
 	}
 
 	// Delete the ledger file so that, if saving writes, it is easily observable.
-	if err := os.Remove(filepath.Join(dir, ledgerFileName)); err != nil {
+	if err := os.Remove(ledgerPath(root)); err != nil {
 		t.Fatal(err)
 	}
 	if err := ledger.Save(); err != nil {
 		t.Fatalf("FsStore.Save() straight after a successful save = %v", err)
 	}
-	noLedgerFile(t, dir, "a second FsStore.Save() with nothing changed in between")
+	noLedgerFile(t, root, "a second FsStore.Save() with nothing changed in between")
 
 	ledger.SetDownloaded("url1", "guid1", true)
 	if err := ledger.Save(); err != nil {
 		t.Fatalf("FsStore.Save() after a redundant SetDownloaded = %v", err)
 	}
-	noLedgerFile(t, dir, "FsStore.Save() after a redundant SetDownloaded")
+	noLedgerFile(t, root, "FsStore.Save() after a redundant SetDownloaded")
 }

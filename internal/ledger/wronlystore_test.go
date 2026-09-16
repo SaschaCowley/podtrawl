@@ -2,7 +2,6 @@ package ledger
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
 	"testing"
 )
@@ -32,19 +31,19 @@ func TestWronlySetDownloaded(t *testing.T) {
 // TestWronlySaveKeepsExistingEntries checks that a redownload run adds to the
 // ledger rather than replacing it: refusing to read is not the same as starting empty.
 func TestWronlySaveKeepsExistingEntries(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "podtrawl")
-	warm, err := New(&dir)
+	root := filepath.Join(t.TempDir(), "library")
+	warm, err := New(root)
 	if err != nil {
-		t.Fatalf("New(%q) = %v", dir, err)
+		t.Fatalf("New(%q) = %v", root, err)
 	}
 	warm.SetDownloaded("url1", "guid1", true)
 	if err := warm.Save(); err != nil {
 		t.Fatalf("WronlyStore.Save() = %v", err)
 	}
 
-	c, err := NewWronly(&dir)
+	c, err := NewWronly(root)
 	if err != nil {
-		t.Fatalf("NewWronly(%q) = %v", dir, err)
+		t.Fatalf("NewWronly(%q) = %v", root, err)
 	}
 	if c.Downloaded("url1", "guid1") {
 		t.Errorf(`WronlyStore.Downloaded("url1", "guid1") = true for a saved episode, want false`)
@@ -54,9 +53,9 @@ func TestWronlySaveKeepsExistingEntries(t *testing.T) {
 		t.Fatalf("WronlyStore.Save() = %v", err)
 	}
 
-	reopened, err := New(&dir)
+	reopened, err := New(root)
 	if err != nil {
-		t.Fatalf("New(%q) after WronlyStore.Save = %v", dir, err)
+		t.Fatalf("New(%q) after WronlyStore.Save = %v", root, err)
 	}
 	for _, tt := range []struct{ url, guid string }{{"url1", "guid1"}, {"url2", "guid2"}} {
 		if !reopened.Downloaded(tt.url, tt.guid) {
@@ -66,26 +65,23 @@ func TestWronlySaveKeepsExistingEntries(t *testing.T) {
 }
 
 func TestNewWronlyCorruptLedger(t *testing.T) {
-	dir := t.TempDir()
+	root := t.TempDir()
 	// A save that was interrupted before rename-in-place existed.
-	partial := []byte(`{"feeds":{"url1":{"downloaded":["guid1"`)
-	if err := os.WriteFile(filepath.Join(dir, ledgerFileName), partial, 0600); err != nil {
-		t.Fatal(err)
-	}
-	c, err := NewWronly(&dir)
+	writeLedger(t, root, []byte(`{"feeds":{"url1":{"downloaded":["guid1"`))
+	c, err := NewWronly(root)
 	if !errors.Is(err, ErrCorrupt) {
-		t.Errorf("NewWronly(%q) on an undecodable ledger = %v, want %v", dir, err, ErrCorrupt)
+		t.Errorf("NewWronly(%q) on an undecodable ledger = %v, want %v", root, err, ErrCorrupt)
 	}
 	if c == nil {
-		t.Fatalf("NewWronly(%q) on an undecodable ledger = nil, want a usable empty ledger", dir)
+		t.Fatalf("NewWronly(%q) on an undecodable ledger = nil, want a usable empty ledger", root)
 	}
 	c.SetDownloaded("url1", "guid1", true)
 	if err := c.Save(); err != nil {
 		t.Fatalf("WronlyStore.Save() = %v", err)
 	}
-	reopened, err := New(&dir)
+	reopened, err := New(root)
 	if err != nil {
-		t.Fatalf("New(%q) after saving over an undecodable ledger = %v", dir, err)
+		t.Fatalf("New(%q) after saving over an undecodable ledger = %v", root, err)
 	}
 	if !reopened.Downloaded("url1", "guid1") {
 		t.Errorf(`WronlyStore.Downloaded("url1", "guid1") = false after reopening, want true`)

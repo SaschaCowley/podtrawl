@@ -9,8 +9,9 @@ import (
 	"path/filepath"
 )
 
-const ledgerFileName = "cache.json"
-const dperm = 0755
+const ledgerDirName = ".podtrawl"
+const ledgerFileName = "ledger.json"
+const dperm = 0700
 
 // ErrCorrupt reports a ledger that could not be decoded.
 var ErrCorrupt = errors.New("unreadable ledger")
@@ -30,21 +31,8 @@ type FsStore struct {
 	dirty      bool
 }
 
-func (s *FsStore) load(dir *string) error {
-	var ledgerDir string
-	if dir != nil {
-		ledgerDir = *dir
-	} else {
-		if dir, err := os.UserCacheDir(); err != nil {
-			return err
-		} else {
-			ledgerDir = filepath.Join(dir, "podtrawl")
-		}
-	}
-	if err := os.MkdirAll(ledgerDir, dperm); err != nil {
-		return err
-	}
-	s.path = filepath.Join(ledgerDir, ledgerFileName)
+func (s *FsStore) load(root string) error {
+	s.path = filepath.Join(root, ledgerDirName, ledgerFileName)
 	data, err := os.ReadFile(s.path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -62,15 +50,16 @@ func (s *FsStore) load(dir *string) error {
 	return nil
 }
 
-// New reads the ledger in dir, defaulting to a podtrawl directory under the user cache dir.
+// New reads the ledger belonging to the download root at root.
 //
 //   - A ledger that isn't there yet is not an error;
 //     it opens empty and comes into existence on the first Save.
+//     Nothing is written, and no directory is created, until then.
 //   - A corrupted ledger causes New to return an empty ledger and ErrCorrupt;
 //     the invalid ledger file will be overwritten the next time Save is called.
-func New(dir *string) (*FsStore, error) {
+func New(root string) (*FsStore, error) {
 	ledger := &FsStore{}
-	err := ledger.load(dir)
+	err := ledger.load(root)
 	if err != nil && !errors.Is(err, ErrCorrupt) {
 		return nil, err
 	}
@@ -88,9 +77,15 @@ func (s *FsStore) Save() (err error) {
 	if err != nil {
 		return err
 	}
+	// Created here rather than on load, so that a run with nothing to record,
+	// such as a dry run, leaves no trace in the download root.
+	dir := filepath.Dir(s.path)
+	if err := os.MkdirAll(dir, dperm); err != nil {
+		return err
+	}
 	// The temporary file has to share a directory with the ledger
 	// for the rename to stay within one filesystem.
-	tmp, err := os.CreateTemp(filepath.Dir(s.path), ledgerFileName+".*")
+	tmp, err := os.CreateTemp(dir, ledgerFileName+".*")
 	if err != nil {
 		return err
 	}

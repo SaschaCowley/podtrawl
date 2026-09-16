@@ -181,7 +181,7 @@ In addition to those provided by `text/template`,
 ## Running
 
 ```sh
-./bin/podtrawl [-c <path>] [-n] [-q|-v] [--json]
+./bin/podtrawl [-c <path>] [-n] [--redownload|--no-ledger] [-q|-v] [--json]
 ```
 
 By default, episodes are downloaded to `<user downloads dir>/podtrawl/<feed title>/<enclosure filename>`.
@@ -203,41 +203,51 @@ It is not affected by the `--verbose` or `--quiet` arguments.
 
 ## Dry run
 
-`-n, --dry-run` reports what a run would do, without downloading any episodes or modifying the cache.
+`-n, --dry-run` reports what a run would do, without downloading any episodes or modifying the ledger.
 Feeds are still fetched.
 
 Every episode is listed with where it would be written, and what would happen to it:
 
 ```
 download  /home/you/Downloads/podtrawl/Test Podcast/episode2-644.mp3
-cached    /home/you/Downloads/podtrawl/Test Podcast/episode1-440.mp3
+done      /home/you/Downloads/podtrawl/Test Podcast/episode1-440.mp3
 skip      /home/you/Downloads/podtrawl/Test Podcast/episode0-trailer.mp3
 ```
 
 * `download`: the episode would be fetched and written to that path.
-* `cached`: the cache already accounts for it, so it would not be fetched.
+* `done`: the ledger already accounts for it, so it would not be fetched.
 * `skip`: a file is already there and the `existing` option is `skip`.
 
-## Download cache
+## Download ledger
 
-podtrawl records what it has already downloaded in `cache.json`,
+podtrawl records what it has already downloaded in `ledger.json`,
 so that a scheduled run only fetches episodes it has not seen before.
-The file lives in `<user cache dir>/podtrawl/`
-(e.g. `%LocalAppData%\podtrawl\` on Windows, `~/.cache/podtrawl/` on Linux, `~/Library/Caches/podtrawl/` on macOS).
+The file lives in `.podtrawl/`, inside the download `root`
+(e.g. `D:/Podcasts/.podtrawl/ledger.json` for the config above).
+Neither the directory nor the file is created until there is something to record.
 
 Episodes are identified by their feed's URL together with the item's "`guid`",
 falling back to the enclosure URL for the feeds that omit it.
 
 Deleting the file makes the next run download every episode again.
-An unreadable cache is logged at level warn,
+An unreadable ledger is logged at level warn,
 treated as empty, and replaced by the next successful download.
+
+Two flags override how a run uses it:
+
+| Flag | Behaviour |
+| --- | --- |
+| `--redownload` | Fetch every episode regardless of what the ledger says, and record what was downloaded. The `existing` policy still applies, so the default `increment` writes alongside the files already there. |
+| `--no-ledger` | Neither consult the ledger nor update it. Nothing about the run is recorded. |
+
+The two are mutually exclusive.
 
 ## Exit status
 
 podtrawl exits 0 when every feed and episode was handled successfully,
 2 if there were issues with the arguments passed at the CLI,
 and 1 otherwise.
-Errors fetching feeds, downloading episodes, or updating the cache are logged,
+Errors fetching feeds, downloading episodes, or updating the ledger are logged,
 but do not stop processing.
 If such errors have occurred in a run, podtrawl exits 1.
 
@@ -251,4 +261,4 @@ If such errors have occurred in a run, podtrawl exits 1.
 * [ ] Cache feed files and responses (`etag`, `ttl` etc), and respect feed properties (`ttl`, `skipDays`, `skipHours` etc)
 * [ ] (Optionally) parallelize downloads across multiple threads
 * [ ] Import and export subscriptions to/from OPML
-* [ ] Interactive configuration and cache management
+* [ ] Interactive configuration and ledger management

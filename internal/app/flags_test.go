@@ -30,9 +30,9 @@ func TestParseArgs(t *testing.T) {
 		{name: "config path may not be empty", args: []string{"--config", ""}, wantErr: true},
 		{name: "json is passed along", args: []string{"--json"}, change: func(f *flags) { f.json = true }},
 		{name: "dry run is passed along", args: []string{"-n"}, change: func(f *flags) { f.dryRun = true }},
-		{name: "no cache is passed along", args: []string{"--no-cache"}, change: func(f *flags) { f.noCache = true }},
+		{name: "no ledger is passed along", args: []string{"--no-ledger"}, change: func(f *flags) { f.noLedger = true }},
 		{name: "redownload is passed along", args: []string{"--redownload"}, change: func(f *flags) { f.redownload = true }},
-		{name: "no cache and redownload are mutually exclusive", args: []string{"--no-cache", "--redownload"}, wantErr: true},
+		{name: "no ledger and redownload are mutually exclusive", args: []string{"--no-ledger", "--redownload"}, wantErr: true},
 		{name: "existing is passed along", args: []string{"--existing", "skip"}, change: func(f *flags) { f.existing = new(naming.Skip) }},
 		{name: "explicit existing=increment is passed along", args: []string{"--existing", "increment"}, change: func(f *flags) { f.existing = new(naming.Increment) }},
 		{name: "invalid value for existing", args: []string{"--existing", "clobber"}, wantErr: true},
@@ -79,6 +79,6 @@ func fmtFlags(f *flags) string {
 	if f.existing != nil {
 		existing = f.existing.String()
 	}
-	return fmt.Sprintf("{configPath:%s, dryRun:%t, existing:%s, json:%t, noCache:%t, redownload:%t, verbosity:%d}",
-		configPath, f.dryRun, existing, f.json, f.noCache, f.redownload, f.verbosity)
+	return fmt.Sprintf("{configPath:%s, dryRun:%t, existing:%s, json:%t, noLedger:%t, redownload:%t, verbosity:%d}",
+		configPath, f.dryRun, existing, f.json, f.noLedger, f.redownload, f.verbosity)
 }

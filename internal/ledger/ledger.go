@@ -3,7 +3,7 @@
 package ledger
 
 type Store interface {
-	// Save persists the current state of the cache.
+	// Save persists the current state of the ledger.
 	Save() error
 	// Downloaded reports whether the episode identified by guid from the feed at url has previously been downloaded.
 	Downloaded(url, guid string) bool
