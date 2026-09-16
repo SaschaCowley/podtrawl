@@ -57,16 +57,16 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) (err error) {
 	if err != nil {
 		return err
 	}
-	c, err := newCache(log, opts)
+	l, err := newLedger(log, opts)
 	if err != nil {
 		return err
 	}
 	if !opts.dryRun {
 		defer func() {
-			if cerr := c.Save(); cerr != nil {
-				log.Error("save cache", "err", cerr)
+			if serr := l.Save(); serr != nil {
+				log.Error("save ledger", "err", serr)
 				if err == nil {
-					err = cerr
+					err = serr
 				}
 			}
 		}()
@@ -117,8 +117,8 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) (err error) {
 			}
 			enclosure := item.Enclosures[0]
 			key := episodeKey(item, enclosure)
-			cached := c.Downloaded(f.url, key)
-			if cached && !opts.dryRun {
+			downloaded := l.Downloaded(f.url, key)
+			if downloaded && !opts.dryRun {
 				fLog.Debug("already downloaded", "episode", key)
 				continue
 			}
@@ -129,7 +129,7 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) (err error) {
 				failures++
 				continue
 			}
-			if !cached {
+			if !downloaded {
 				var free bool
 				want := dest
 				if dest, free, err = f.available(dest); err != nil {
@@ -152,8 +152,8 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) (err error) {
 			fLog.Debug("episode destination", "item", itemTitle(item), "dest", dest)
 			if opts.dryRun {
 				status := "download"
-				if cached {
-					status = "cached"
+				if downloaded {
+					status = "done"
 				}
 				fmt.Printf("%-8s  %s\n", status, dest)
 				continue
@@ -163,13 +163,13 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) (err error) {
 				failures++
 				continue
 			}
-			c.SetDownloaded(f.url, key, true)
+			l.SetDownloaded(f.url, key, true)
 		}
 		if !opts.dryRun {
-			// An unsaved cache means we might have to do more work later,
+			// An unsaved ledger means we might have to do more work later,
 			// but shouldn't mean we abandon all the remaining downloads.
-			if err := c.Save(); err != nil {
-				fLog.Error("save cache", "err", err)
+			if err := l.Save(); err != nil {
+				fLog.Error("save ledger", "err", err)
 				failures++
 			}
 		}
@@ -180,30 +180,30 @@ func run(ctx context.Context, log *slog.Logger, opts *flags) (err error) {
 	return nil
 }
 
-// newCache creates the download cache,
-// reporting a cache that could not be read only as a warning.
-// Starting from an empty cache costs a re-download;
+// newLedger creates the download ledger,
+// reporting a ledger that could not be read only as a warning.
+// Starting from an empty ledger costs a re-download;
 // stopping here would cost the whole run.
-func newCache(logger *slog.Logger, opts *flags) (ledger.Cache, error) {
+func newLedger(logger *slog.Logger, opts *flags) (ledger.Store, error) {
 	if opts.noCache {
-		return ledger.NopCache{}, nil
+		return ledger.NopStore{}, nil
 	}
 	var (
-		c   ledger.Cache
+		l   ledger.Store
 		err error
 	)
 	if opts.redownload {
-		c, err = ledger.NewWronly(nil)
+		l, err = ledger.NewWronly(nil)
 	} else {
-		c, err = ledger.New(nil)
+		l, err = ledger.New(nil)
 	}
 	if err != nil {
 		if !errors.Is(err, ledger.ErrCorrupt) {
 			return nil, err
 		}
-		logger.Warn("cache unreadable, starting cold", "err", err)
+		logger.Warn("ledger unreadable, assuming empty", "err", err)
 	}
-	return c, nil
+	return l, nil
 }
 
 func getFeed(ctx context.Context, url string) (*feed.Rss, error) {

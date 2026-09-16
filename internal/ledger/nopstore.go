@@ -1,8 +1,8 @@
 package ledger
 
-// NopCache never persists anything, and always behaves like a cold cache.
-type NopCache struct{}
+// NopStore never persists anything, and always behaves like an empty ledger.
+type NopStore struct{}
 
-func (NopCache) Save() error                        { return nil }
-func (NopCache) Downloaded(string, string) bool     { return false }
-func (NopCache) SetDownloaded(string, string, bool) {}
+func (NopStore) Save() error                        { return nil }
+func (NopStore) Downloaded(string, string) bool     { return false }
+func (NopStore) SetDownloaded(string, string, bool) {}

@@ -2,23 +2,23 @@ package ledger
 
 import "errors"
 
-// WronlyCache is a write-only Cache.
-// Writes are persisted, but reads are always treated like a cold cache.
-type WronlyCache struct {
-	fsCache FsCache
+// WronlyStore is a write-only Store.
+// Writes are persisted, but reads are always treated like an empty ledger.
+type WronlyStore struct {
+	fsStore FsStore
 }
 
-func NewWronly(dir *string) (*WronlyCache, error) {
-	c := &WronlyCache{}
-	err := c.fsCache.load(dir)
+func NewWronly(dir *string) (*WronlyStore, error) {
+	s := &WronlyStore{}
+	err := s.fsStore.load(dir)
 	if err != nil && !errors.Is(err, ErrCorrupt) {
 		return nil, err
 	}
-	return c, err
+	return s, err
 }
 
-func (c *WronlyCache) Save() error                  { return c.fsCache.Save() }
-func (*WronlyCache) Downloaded(string, string) bool { return false }
-func (c *WronlyCache) SetDownloaded(url, guid string, downloaded bool) {
-	c.fsCache.SetDownloaded(url, guid, downloaded)
+func (s *WronlyStore) Save() error                  { return s.fsStore.Save() }
+func (*WronlyStore) Downloaded(string, string) bool { return false }
+func (s *WronlyStore) SetDownloaded(url, guid string, downloaded bool) {
+	s.fsStore.SetDownloaded(url, guid, downloaded)
 }

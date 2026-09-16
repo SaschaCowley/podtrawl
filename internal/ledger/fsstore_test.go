@@ -9,9 +9,9 @@ import (
 	"testing"
 )
 
-func sampleCache() *FsCache {
-	return &FsCache{
-		cacheFile: cacheFile{
+func sampleFsStore() *FsStore {
+	return &FsStore{
+		ledgerFile: ledgerFile{
 			Feeds: map[string]*feed{
 				"url1": &feed{
 					Downloaded: strSet{"guid1": {}},
@@ -24,29 +24,29 @@ func sampleCache() *FsCache {
 	}
 }
 
-func emptyCache() *FsCache {
-	return &FsCache{}
+func emptyLedger() *FsStore {
+	return &FsStore{}
 }
 
 func TestDownloaded(t *testing.T) {
 	tests := []struct {
-		name  string
-		cache func() *FsCache
-		url   string
-		guid  string
-		want  bool
+		name   string
+		ledger func() *FsStore
+		url    string
+		guid   string
+		want   bool
 	}{
-		{"downloaded episode", sampleCache, "url1", "guid1", true},
-		{"undownloaded episode", sampleCache, "url1", "guid999", false},
-		{"show with no downloads", sampleCache, "url999", "guid999", false},
-		{"wrong url", sampleCache, "url2", "guid1", false},
-		{"empty cache", emptyCache, "url1", "guid1", false},
+		{"downloaded episode", sampleFsStore, "url1", "guid1", true},
+		{"undownloaded episode", sampleFsStore, "url1", "guid999", false},
+		{"show with no downloads", sampleFsStore, "url999", "guid999", false},
+		{"wrong url", sampleFsStore, "url2", "guid1", false},
+		{"empty ledger", emptyLedger, "url1", "guid1", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cache := tt.cache()
-			if got := cache.Downloaded(tt.url, tt.guid); got != tt.want {
-				t.Errorf("Cache.Downloaded(%q, %q) = %t, want %t", tt.url, tt.guid, got, tt.want)
+			ledger := tt.ledger()
+			if got := ledger.Downloaded(tt.url, tt.guid); got != tt.want {
+				t.Errorf("FsStore.Downloaded(%q, %q) = %t, want %t", tt.url, tt.guid, got, tt.want)
 			}
 		})
 	}
@@ -55,34 +55,34 @@ func TestDownloaded(t *testing.T) {
 func TestSetDownloaded(t *testing.T) {
 	tests := []struct {
 		name       string
-		cache      func() *FsCache
+		ledger     func() *FsStore
 		url        string
 		guid       string
 		downloaded bool
 		prior      bool
 	}{
-		{"mark undownloaded episode as downloaded", sampleCache, "url1", "guid99", true, false},
-		{"mark undownloaded episode as not downloaded", sampleCache, "url1", "guid99", false, false},
-		{"mark downloaded episode as downloaded", sampleCache, "url1", "guid1", true, true},
-		{"mark downloaded episode as not downloaded", sampleCache, "url1", "guid1", false, true},
-		{"mark episode in new show as downloaded", sampleCache, "url99", "guid99", true, false},
-		{"mark episode in new show as not downloaded", sampleCache, "url99", "guid99", false, false},
-		{"mark episode as downloaded in empty cache", emptyCache, "url1", "guid1", true, false},
-		{"mark episode as not downloaded in empty cache", emptyCache, "url1", "guid1", false, false},
+		{"mark undownloaded episode as downloaded", sampleFsStore, "url1", "guid99", true, false},
+		{"mark undownloaded episode as not downloaded", sampleFsStore, "url1", "guid99", false, false},
+		{"mark downloaded episode as downloaded", sampleFsStore, "url1", "guid1", true, true},
+		{"mark downloaded episode as not downloaded", sampleFsStore, "url1", "guid1", false, true},
+		{"mark episode in new show as downloaded", sampleFsStore, "url99", "guid99", true, false},
+		{"mark episode in new show as not downloaded", sampleFsStore, "url99", "guid99", false, false},
+		{"mark episode as downloaded in empty ledger", emptyLedger, "url1", "guid1", true, false},
+		{"mark episode as not downloaded in empty ledger", emptyLedger, "url1", "guid1", false, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cache := tt.cache()
-			feed := cache.cacheFile.Feeds[tt.url]
+			ledger := tt.ledger()
+			feed := ledger.ledgerFile.Feeds[tt.url]
 			var oldGuids, newGuids strSet
 			if feed != nil {
 				oldGuids = maps.Clone(feed.Downloaded)
 			} else {
 				oldGuids = nil
 			}
-			cache.SetDownloaded(tt.url, tt.guid, tt.downloaded)
-			if got := cache.Downloaded(tt.url, tt.guid); got != tt.downloaded {
-				t.Errorf("Cache.SetDownloaded(%q, %q, %t); Cache.Downloaded(%[1]q, %q) = %[4]t, want %[3]t", tt.url, tt.guid, tt.downloaded, got)
+			ledger.SetDownloaded(tt.url, tt.guid, tt.downloaded)
+			if got := ledger.Downloaded(tt.url, tt.guid); got != tt.downloaded {
+				t.Errorf("FsStore.SetDownloaded(%q, %q, %t); FsStore.Downloaded(%[1]q, %q) = %[4]t, want %[3]t", tt.url, tt.guid, tt.downloaded, got)
 			}
 			if feed != nil {
 				newGuids = feed.Downloaded
@@ -93,8 +93,8 @@ func TestSetDownloaded(t *testing.T) {
 				t.Errorf("expected downloaded guids to be unchanged.\nold: %#v\nnew: %#v", oldGuids, newGuids)
 			}
 			if feed == nil && !tt.downloaded {
-				if _, ok := cache.cacheFile.Feeds[tt.url]; ok {
-					t.Errorf("Cache.SetDownloaded(%q, %q, false) created an entry for an unknown show", tt.url, tt.guid)
+				if _, ok := ledger.ledgerFile.Feeds[tt.url]; ok {
+					t.Errorf("FsStore.SetDownloaded(%q, %q, false) created an entry for an unknown show", tt.url, tt.guid)
 				}
 			}
 		})
@@ -104,23 +104,23 @@ func TestSetDownloaded(t *testing.T) {
 func TestSaveRoundTrip(t *testing.T) {
 	// A directory that isn't there yet also exercises the MkdirAll in New.
 	dir := filepath.Join(t.TempDir(), "podtrawl")
-	cache, err := New(&dir)
+	ledger, err := New(&dir)
 	if err != nil {
 		t.Fatalf("New(%q) = %v", dir, err)
 	}
-	if cache.Downloaded("url1", "guid1") {
-		t.Errorf(`Cache.Downloaded("url1", "guid1") = true in a cache that does not exist yet, want false`)
+	if ledger.Downloaded("url1", "guid1") {
+		t.Errorf(`FsStore.Downloaded("url1", "guid1") = true in a ledger that does not exist yet, want false`)
 	}
-	cache.SetDownloaded("url1", "guid1", true)
-	if err := cache.Save(); err != nil {
-		t.Fatalf("Cache.Save() = %v", err)
+	ledger.SetDownloaded("url1", "guid1", true)
+	if err := ledger.Save(); err != nil {
+		t.Fatalf("FsStore.Save() = %v", err)
 	}
 	reopened, err := New(&dir)
 	if err != nil {
 		t.Fatalf("New(%q) after Save = %v", dir, err)
 	}
 	if !reopened.Downloaded("url1", "guid1") {
-		t.Errorf(`Cache.Downloaded("url1", "guid1") = false after reopening, want true`)
+		t.Errorf(`FsStore.Downloaded("url1", "guid1") = false after reopening, want true`)
 	}
 	// Save renames a temporary file into place; none of them should survive it.
 	entries, err := os.ReadDir(dir)
@@ -131,81 +131,81 @@ func TestSaveRoundTrip(t *testing.T) {
 	for _, entry := range entries {
 		names = append(names, entry.Name())
 	}
-	if !slices.Equal(names, []string{cacheFileName}) {
-		t.Errorf("cache dir holds %q after Save, want only %q", names, cacheFileName)
+	if !slices.Equal(names, []string{ledgerFileName}) {
+		t.Errorf("ledger dir holds %q after Save, want only %q", names, ledgerFileName)
 	}
 }
 
-func TestNewCorruptCache(t *testing.T) {
+func TestNewCorruptLedger(t *testing.T) {
 	dir := t.TempDir()
 	// A save that was interrupted before rename-in-place existed.
 	partial := []byte(`{"feeds":{"url1":{"downloaded":["guid1"`)
-	if err := os.WriteFile(filepath.Join(dir, cacheFileName), partial, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ledgerFileName), partial, 0600); err != nil {
 		t.Fatal(err)
 	}
-	cache, err := New(&dir)
+	ledger, err := New(&dir)
 	if !errors.Is(err, ErrCorrupt) {
-		t.Errorf("New(%q) on an undecodable cache = %v, want %v", dir, err, ErrCorrupt)
+		t.Errorf("New(%q) on an undecodable ledger = %v, want %v", dir, err, ErrCorrupt)
 	}
-	if cache == nil {
-		t.Fatalf("New(%q) on an undecodable cache = nil, want a usable empty cache", dir)
+	if ledger == nil {
+		t.Fatalf("New(%q) on an undecodable ledger = nil, want a usable empty ledger", dir)
 	}
-	if cache.Downloaded("url1", "guid1") {
-		t.Errorf(`Cache.Downloaded("url1", "guid1") = true, want false: nothing decoded is to be trusted`)
+	if ledger.Downloaded("url1", "guid1") {
+		t.Errorf(`FsStore.Downloaded("url1", "guid1") = true, want false: nothing decoded is to be trusted`)
 	}
 	// The bad file must not outlive the run that found it.
-	cache.SetDownloaded("url1", "guid1", true)
-	if err := cache.Save(); err != nil {
-		t.Fatalf("Cache.Save() = %v", err)
+	ledger.SetDownloaded("url1", "guid1", true)
+	if err := ledger.Save(); err != nil {
+		t.Fatalf("FsStore.Save() = %v", err)
 	}
 	reopened, err := New(&dir)
 	if err != nil {
-		t.Fatalf("New(%q) after saving over an undecodable cache = %v", dir, err)
+		t.Fatalf("New(%q) after saving over an undecodable ledger = %v", dir, err)
 	}
 	if !reopened.Downloaded("url1", "guid1") {
-		t.Errorf(`Cache.Downloaded("url1", "guid1") = false after reopening, want true`)
+		t.Errorf(`FsStore.Downloaded("url1", "guid1") = false after reopening, want true`)
 	}
 }
 
-// noCacheFile asserts that a cache file does not exist.
-func noCacheFile(t *testing.T, dir, after string) {
+// noLedgerFile asserts that a ledger file does not exist.
+func noLedgerFile(t *testing.T, dir, after string) {
 	t.Helper()
-	if _, err := os.Stat(filepath.Join(dir, cacheFileName)); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("%s wrote %s, want no write (stat: %v)", after, cacheFileName, err)
+	if _, err := os.Stat(filepath.Join(dir, ledgerFileName)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("%s wrote %s, want no write (stat: %v)", after, ledgerFileName, err)
 	}
 }
 
 func TestSaveSkipsUnchanged(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "podtrawl")
-	cache, err := New(&dir)
+	ledger, err := New(&dir)
 	if err != nil {
 		t.Fatalf("New(%q) = %v", dir, err)
 	}
-	if err := cache.Save(); err != nil {
-		t.Fatalf("Cache.Save() on an unchanged cache = %v", err)
+	if err := ledger.Save(); err != nil {
+		t.Fatalf("FsStore.Save() on an unchanged ledger = %v", err)
 	}
-	noCacheFile(t, dir, "Cache.Save() on a cache that has never changed")
+	noLedgerFile(t, dir, "FsStore.Save() on a ledger that has never changed")
 
-	cache.SetDownloaded("url1", "guid1", true)
-	if err := cache.Save(); err != nil {
-		t.Fatalf("Cache.Save() = %v", err)
+	ledger.SetDownloaded("url1", "guid1", true)
+	if err := ledger.Save(); err != nil {
+		t.Fatalf("FsStore.Save() = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, cacheFileName)); err != nil {
-		t.Fatalf("stat %s after a save that changed something = %v", cacheFileName, err)
+	if _, err := os.Stat(filepath.Join(dir, ledgerFileName)); err != nil {
+		t.Fatalf("stat %s after a save that changed something = %v", ledgerFileName, err)
 	}
 
-	// Delete the cache file so that, if saving writes, it is easily observable.
-	if err := os.Remove(filepath.Join(dir, cacheFileName)); err != nil {
+	// Delete the ledger file so that, if saving writes, it is easily observable.
+	if err := os.Remove(filepath.Join(dir, ledgerFileName)); err != nil {
 		t.Fatal(err)
 	}
-	if err := cache.Save(); err != nil {
-		t.Fatalf("Cache.Save() straight after a successful save = %v", err)
+	if err := ledger.Save(); err != nil {
+		t.Fatalf("FsStore.Save() straight after a successful save = %v", err)
 	}
-	noCacheFile(t, dir, "a second Cache.Save() with nothing changed in between")
+	noLedgerFile(t, dir, "a second FsStore.Save() with nothing changed in between")
 
-	cache.SetDownloaded("url1", "guid1", true)
-	if err := cache.Save(); err != nil {
-		t.Fatalf("Cache.Save() after a redundant SetDownloaded = %v", err)
+	ledger.SetDownloaded("url1", "guid1", true)
+	if err := ledger.Save(); err != nil {
+		t.Fatalf("FsStore.Save() after a redundant SetDownloaded = %v", err)
 	}
-	noCacheFile(t, dir, "Cache.Save() after a redundant SetDownloaded")
+	noLedgerFile(t, dir, "FsStore.Save() after a redundant SetDownloaded")
 }
