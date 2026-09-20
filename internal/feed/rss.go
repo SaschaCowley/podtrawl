@@ -2,10 +2,14 @@ package feed
 
 import "encoding/xml"
 
+// nsUnnamespaced is the name space Load assigns to a feed's unadorned elements,
+// so we can distinguish between <tag> and <ns:tag>.
+const nsUnnamespaced = "_"
+
 type Rss struct {
-	XMLName xml.Name `xml:"rss"`
+	XMLName xml.Name `xml:"_ rss"`
 	Version string   `xml:"version,attr"`
-	Channel Channel  `xml:"channel"`
+	Channel Channel  `xml:"_ channel"`
 }
 
 // Channel may also have the following optional children,
@@ -13,22 +17,22 @@ type Rss struct {
 // generator, docs, cloud, image, rating, and textInput.
 type Channel struct {
 	// Required elements
-	Title       string `xml:"title"`
-	Link        string `xml:"link"` // URL
-	Description string `xml:"description"`
+	Title       string `xml:"_ title"`
+	Link        string `xml:"_ link"` // URL
+	Description string `xml:"_ description"`
 
 	// Optional elements
-	Language       *string          `xml:"language"`
-	Copyright      *string          `xml:"copyright"`
-	ManagingEditor *string          `xml:"managingEditor"` // Email address
-	WebMaster      *string          `xml:"webMaster"`      // Email address
-	PubDate        *Rfc2822Datetime `xml:"pubDate"`
-	LastBuildDate  *Rfc2822Datetime `xml:"lastBuildDate"`
-	Categories     []Category       `xml:"category"`
-	Ttl            *int             `xml:"ttl"`
-	SkipHours      []int            `xml:"skipHours>hour"`
-	SkipDays       []string         `xml:"skipDays>day"`
-	Items          []Item           `xml:"item"`
+	Language       *string          `xml:"_ language"`
+	Copyright      *string          `xml:"_ copyright"`
+	ManagingEditor *string          `xml:"_ managingEditor"` // Email address
+	WebMaster      *string          `xml:"_ webMaster"`      // Email address
+	PubDate        *Rfc2822Datetime `xml:"_ pubDate"`
+	LastBuildDate  *Rfc2822Datetime `xml:"_ lastBuildDate"`
+	Categories     []Category       `xml:"_ category"`
+	Ttl            *int             `xml:"_ ttl"`
+	SkipHours      []int            `xml:"_ skipHours>hour"`
+	SkipDays       []string         `xml:"_ skipDays>day"`
+	Items          []Item           `xml:"_ item"`
 }
 
 // The spec says that all of these children are optional,
@@ -36,16 +40,16 @@ type Channel struct {
 // Currently the unmarshaler does not validate this.
 type Item struct {
 	// Optional children
-	Title       *string          `xml:"title"`
-	Link        *string          `xml:"link"`
-	Description *string          `xml:"description"`
-	Author      *string          `xml:"author"` // email address
-	Categories  []Category       `xml:"category"`
-	Comments    *string          `xml:"comments"` // Url
-	Enclosures  []Enclosure      `xml:"enclosure"`
-	Guid        *Guid            `xml:"guid"`
-	PubDate     *Rfc2822Datetime `xml:"pubDate"`
-	Source      *Source          `xml:"source"`
+	Title       *string          `xml:"_ title"`
+	Link        *string          `xml:"_ link"`
+	Description *string          `xml:"_ description"`
+	Author      *string          `xml:"_ author"` // email address
+	Categories  []Category       `xml:"_ category"`
+	Comments    *string          `xml:"_ comments"` // Url
+	Enclosures  []Enclosure      `xml:"_ enclosure"`
+	Guid        *Guid            `xml:"_ guid"`
+	PubDate     *Rfc2822Datetime `xml:"_ pubDate"`
+	Source      *Source          `xml:"_ source"`
 }
 
 type Category struct {
