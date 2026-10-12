@@ -14,21 +14,20 @@ const nsItunes = "http://www.itunes.com/dtds/podcast-1.0.dtd"
 
 // ItunesChannel holds the itunes: children of a channel.
 // The following children are intentionally excluded, being either deprecated or of no use in this application:
-// summary, subtitle, keywords, block, and complete.
+// summary, subtitle, keywords, block, image and complete.
 type ItunesChannel struct {
 	Title      *string          `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd title"`
 	Author     *string          `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd author"`
 	Type       *string          `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd type"` // episodic or serial
 	NewFeedUrl *string          `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd new-feed-url"`
 	Explicit   ItunesExplicit   `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd explicit"`
-	Image      *ItunesImage     `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd image"`
 	Categories []ItunesCategory `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd category"`
 	Owner      *ItunesOwner     `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd owner"`
 }
 
 // ItunesItem holds the itunes: children of an item.
 // The following children are intentionally excluded, being either deprecated or of no use in this application:
-// summary, subtitle, keywords, and block.
+// summary, subtitle, keywords, image and block.
 type ItunesItem struct {
 	Title       *string        `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd title"`
 	Author      *string        `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd author"`
@@ -37,11 +36,6 @@ type ItunesItem struct {
 	Season      ItunesNumber   `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd season"`
 	Duration    ItunesDuration `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd duration"`
 	Explicit    ItunesExplicit `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd explicit"`
-	Image       *ItunesImage   `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd image"`
-}
-
-type ItunesImage struct {
-	Href string `xml:"href,attr"` // URL
 }
 
 type ItunesCategory struct {

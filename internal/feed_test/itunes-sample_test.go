@@ -22,7 +22,6 @@ var itunesSample feed.Rss = feed.Rss{
 			Author:   new("The Sunset Explorers"),
 			Type:     new("serial"),
 			Explicit: feed.ExplicitNo,
-			Image:    &feed.ItunesImage{Href: "https://applehosted.podcasts.apple.com/hiking_treks/artwork.png"},
 			Categories: []feed.ItunesCategory{
 				{Text: "Sports", Subcategories: []feed.ItunesCategory{{Text: "Wilderness"}}},
 			},
@@ -67,7 +66,6 @@ var itunesSample feed.Rss = feed.Rss{
 					Season:      2,
 					Duration:    feed.ItunesDuration{Duration: 3627 * time.Second},
 					Explicit:    feed.ExplicitNo,
-					Image:       &feed.ItunesImage{Href: "http://example.com/podcasts/everything/AllAboutEverything/Episode2.jpg"},
 				},
 			},
 			{
@@ -82,7 +80,6 @@ var itunesSample feed.Rss = feed.Rss{
 					Season:      2,
 					Duration:    feed.ItunesDuration{Duration: 2434 * time.Second},
 					Explicit:    feed.ExplicitNo,
-					Image:       &feed.ItunesImage{Href: "http://example.com/podcasts/everything/AllAboutEverything/Episode3.jpg"},
 				},
 			},
 			{
