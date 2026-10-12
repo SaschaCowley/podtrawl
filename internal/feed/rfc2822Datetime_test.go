@@ -32,6 +32,21 @@ func TestRfc2822DatetimeFormats(t *testing.T) {
 			time.Date(2024, 1, 2, 15, 4, 5, 0, time.UTC),
 		},
 		{
+			"RFC 3339 fallback",
+			"2024-01-02T15:04:05Z",
+			time.Date(2024, 1, 2, 15, 4, 5, 0, time.UTC),
+		},
+		{
+			"RFC 3339 fallback with fractional seconds",
+			"2019-02-16T07:00:00.000Z",
+			time.Date(2019, 2, 16, 7, 0, 0, 0, time.UTC),
+		},
+		{
+			"RFC 3339 fallback with numeric zone",
+			"2024-01-02T15:04:05-07:00",
+			time.Date(2024, 1, 2, 15, 4, 5, 0, time.FixedZone("", -7*3600)),
+		},
+		{
 			"surrounding whitespace is trimmed",
 			"  Tue, 2 Jan 2024 15:04:05 UTC  ",
 			time.Date(2024, 1, 2, 15, 4, 5, 0, time.UTC),
@@ -54,7 +69,7 @@ func TestRfc2822DatetimeInvalid(t *testing.T) {
 	tests := []string{
 		"",
 		"not a date",
-		"2024-01-02T15:04:05Z",
+		"2024-01-02 15:04:05",
 		"Tue, 2 Jan 2024",
 	}
 	for _, input := range tests {

@@ -33,6 +33,9 @@ type Channel struct {
 	SkipHours      []int            `xml:"_ skipHours>hour"`
 	SkipDays       []string         `xml:"_ skipDays>day"`
 	Items          []Item           `xml:"_ item"`
+
+	// Name spaced children, filled by UnmarshalXML.
+	Itunes ItunesChannel `xml:"-"`
 }
 
 // The spec says that all of these children are optional,
@@ -50,6 +53,37 @@ type Item struct {
 	Guid        *Guid            `xml:"_ guid"`
 	PubDate     *Rfc2822Datetime `xml:"_ pubDate"`
 	Source      *Source          `xml:"_ source"`
+
+	// Name spaced children, filled by UnmarshalXML.
+	Itunes ItunesItem `xml:"-"`
+}
+
+func (c *Channel) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	type channel Channel
+	var aux struct {
+		channel
+		ItunesChannel
+	}
+	if err := d.DecodeElement(&aux, &start); err != nil {
+		return err
+	}
+	*c = Channel(aux.channel)
+	c.Itunes = aux.ItunesChannel
+	return nil
+}
+
+func (i *Item) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	type item Item
+	var aux struct {
+		item
+		ItunesItem
+	}
+	if err := d.DecodeElement(&aux, &start); err != nil {
+		return err
+	}
+	*i = Item(aux.item)
+	i.Itunes = aux.ItunesItem
+	return nil
 }
 
 type Category struct {

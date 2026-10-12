@@ -16,6 +16,7 @@ var feedCases = []struct {
 	want feed.Rss
 }{
 	{"rss-2.0-sample.xml", rss20Sample},
+	{"itunes-sample.xml", itunesSample},
 }
 
 func TestFeeds(t *testing.T) {
