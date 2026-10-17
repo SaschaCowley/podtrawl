@@ -14,12 +14,11 @@ const nsItunes = "http://www.itunes.com/dtds/podcast-1.0.dtd"
 
 // ItunesChannel holds the itunes: children of a channel.
 // The following children are intentionally excluded, being either deprecated or of no use in this application:
-// summary, subtitle, keywords, block, image and complete.
+// summary, subtitle, keywords, block, image, new-feed-url and complete.
 type ItunesChannel struct {
 	Title      *string          `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd title"`
 	Author     *string          `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd author"`
-	Type       *string          `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd type"` // episodic or serial
-	NewFeedUrl *string          `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd new-feed-url"`
+	Type       ItunesType       `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd type"` // episodic or serial
 	Explicit   ItunesExplicit   `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd explicit"`
 	Categories []ItunesCategory `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd category"`
 	Owner      *ItunesOwner     `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd owner"`
@@ -29,13 +28,13 @@ type ItunesChannel struct {
 // The following children are intentionally excluded, being either deprecated or of no use in this application:
 // summary, subtitle, keywords, image and block.
 type ItunesItem struct {
-	Title       *string        `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd title"`
-	Author      *string        `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd author"`
-	EpisodeType *string        `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd episodeType"` // full, trailer, or bonus
-	Episode     ItunesNumber   `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd episode"`
-	Season      ItunesNumber   `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd season"`
-	Duration    ItunesDuration `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd duration"`
-	Explicit    ItunesExplicit `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd explicit"`
+	Title       *string           `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd title"`
+	Author      *string           `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd author"`
+	EpisodeType ItunesEpisodeType `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd episodeType"` // full, trailer, or bonus
+	Episode     ItunesNumber      `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd episode"`
+	Season      ItunesNumber      `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd season"`
+	Duration    ItunesDuration    `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd duration"`
+	Explicit    ItunesExplicit    `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd explicit"`
 }
 
 type ItunesCategory struct {
@@ -71,6 +70,43 @@ func (e *ItunesExplicit) UnmarshalText(text []byte) error {
 		*e = ExplicitNo
 	default:
 		*e = ExplicitUnknown
+	}
+	return nil
+}
+
+type ItunesType int
+
+const (
+	ItunesEpisodic ItunesType = iota
+	ItunesSerial
+)
+
+func (t *ItunesType) UnmarshalText(text []byte) error {
+	switch strings.ToLower(strings.TrimSpace(string(text))) {
+	case "serial":
+		*t = ItunesSerial
+	default:
+		*t = ItunesEpisodic
+	}
+	return nil
+}
+
+type ItunesEpisodeType int
+
+const (
+	ItunesFull ItunesEpisodeType = iota
+	ItunesTrailer
+	ItunesBonus
+)
+
+func (t *ItunesEpisodeType) UnmarshalText(text []byte) error {
+	switch strings.ToLower(strings.TrimSpace(string(text))) {
+	case "trailer":
+		*t = ItunesTrailer
+	case "bonus":
+		*t = ItunesBonus
+	default:
+		*t = ItunesFull
 	}
 	return nil
 }

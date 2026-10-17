@@ -20,7 +20,7 @@ var itunesSample feed.Rss = feed.Rss{
 		Copyright:   new("\u00a9 2020 John Appleseed"),
 		Itunes: feed.ItunesChannel{
 			Author:   new("The Sunset Explorers"),
-			Type:     new("serial"),
+			Type:     feed.ItunesSerial,
 			Explicit: feed.ExplicitNo,
 			Categories: []feed.ItunesCategory{
 				{Text: "Sports", Subcategories: []feed.ItunesCategory{{Text: "Wilderness"}}},
@@ -34,7 +34,7 @@ var itunesSample feed.Rss = feed.Rss{
 				PubDate:     &feed.Rfc2822Datetime{Time: time.Date(2019, time.January, 8, 1, 15, 0, 0, time.UTC)},
 				Itunes: feed.ItunesItem{
 					Title:       new("Hiking Treks Trailer"),
-					EpisodeType: new("trailer"),
+					EpisodeType: feed.ItunesTrailer,
 					Duration:    feed.ItunesDuration{Duration: 1079 * time.Second},
 					Explicit:    feed.ExplicitNo,
 				},
@@ -46,7 +46,7 @@ var itunesSample feed.Rss = feed.Rss{
 				Guid:        &feed.Guid{IsPermalink: true, Value: "22BCFEBF-44FB-4A19-8229-7AC678629F57"},
 				PubDate:     &feed.Rfc2822Datetime{Time: time.Date(2019, time.May, 7, 12, 0, 0, 0, time.UTC)},
 				Itunes: feed.ItunesItem{
-					EpisodeType: new("full"),
+					EpisodeType: feed.ItunesFull,
 					Episode:     4,
 					Season:      2,
 					Duration:    feed.ItunesDuration{Duration: 1024 * time.Second},
@@ -61,7 +61,7 @@ var itunesSample feed.Rss = feed.Rss{
 				Guid:        &feed.Guid{IsPermalink: true, Value: "BE486CAA-B3D5-4FB0-8298-EFEBE71C5982"},
 				PubDate:     &feed.Rfc2822Datetime{Time: time.Date(2019, time.April, 30, 13, 0, 0, 0, time.UTC)},
 				Itunes: feed.ItunesItem{
-					EpisodeType: new("full"),
+					EpisodeType: feed.ItunesFull,
 					Episode:     3,
 					Season:      2,
 					Duration:    feed.ItunesDuration{Duration: 3627 * time.Second},
@@ -75,7 +75,7 @@ var itunesSample feed.Rss = feed.Rss{
 				Guid:        &feed.Guid{IsPermalink: true, Value: "142FAFE9-B1DF-4F6D-BAA8-79BDBAF653A9"},
 				PubDate:     &feed.Rfc2822Datetime{Time: time.Date(2019, time.May, 23, 2, 0, 0, 0, time.FixedZone("", -7*3600))},
 				Itunes: feed.ItunesItem{
-					EpisodeType: new("full"),
+					EpisodeType: feed.ItunesFull,
 					Episode:     2,
 					Season:      2,
 					Duration:    feed.ItunesDuration{Duration: 2434 * time.Second},
@@ -89,7 +89,7 @@ var itunesSample feed.Rss = feed.Rss{
 				Guid:        &feed.Guid{IsPermalink: true, Value: "5F1DBAEB-3327-49FB-ACB3-DB0158A1D0A3"},
 				PubDate:     &feed.Rfc2822Datetime{Time: time.Date(2019, time.February, 16, 7, 0, 0, 0, time.UTC)},
 				Itunes: feed.ItunesItem{
-					EpisodeType: new("full"),
+					EpisodeType: feed.ItunesFull,
 					Episode:     1,
 					Season:      2,
 					Duration:    feed.ItunesDuration{Duration: 13*time.Minute + 24*time.Second},
@@ -103,7 +103,7 @@ var itunesSample feed.Rss = feed.Rss{
 				Guid:        &feed.Guid{IsPermalink: true, Value: "B5FCEB80-317C-4CD0-A84B-807065B43FB9"},
 				PubDate:     &feed.Rfc2822Datetime{Time: time.Date(2018, time.November, 27, 1, 15, 0, 0, time.UTC)},
 				Itunes: feed.ItunesItem{
-					EpisodeType: new("full"),
+					EpisodeType: feed.ItunesFull,
 					Episode:     4,
 					Season:      1,
 					Duration:    feed.ItunesDuration{Duration: 929 * time.Second},
@@ -117,7 +117,7 @@ var itunesSample feed.Rss = feed.Rss{
 				Guid:        &feed.Guid{IsPermalink: true, Value: "F0C5D763-ED85-4449-9C09-81FEBDF6F126"},
 				PubDate:     &feed.Rfc2822Datetime{Time: time.Date(2018, time.October, 23, 1, 15, 0, 0, time.UTC)},
 				Itunes: feed.ItunesItem{
-					EpisodeType: new("full"),
+					EpisodeType: feed.ItunesFull,
 					Episode:     3,
 					Season:      1,
 					Duration:    feed.ItunesDuration{Duration: 1440 * time.Second},
@@ -131,7 +131,7 @@ var itunesSample feed.Rss = feed.Rss{
 				Guid:        &feed.Guid{IsPermalink: true, Value: "821DD0B2-571D-4DFD-8E11-556E8C1EFE6A"},
 				PubDate:     &feed.Rfc2822Datetime{Time: time.Date(2018, time.September, 18, 1, 15, 0, 0, time.UTC)},
 				Itunes: feed.ItunesItem{
-					EpisodeType: new("full"),
+					EpisodeType: feed.ItunesFull,
 					Episode:     2,
 					Season:      1,
 					Duration:    feed.ItunesDuration{Duration: 839 * time.Second},
@@ -145,7 +145,7 @@ var itunesSample feed.Rss = feed.Rss{
 				Guid:        &feed.Guid{IsPermalink: true, Value: "EABDA7EE-1AC6-4B60-9E11-6B3F30B72F87"},
 				PubDate:     &feed.Rfc2822Datetime{Time: time.Date(2018, time.August, 14, 1, 15, 0, 0, time.UTC)},
 				Itunes: feed.ItunesItem{
-					EpisodeType: new("full"),
+					EpisodeType: feed.ItunesFull,
 					Episode:     1,
 					Season:      1,
 					Duration:    feed.ItunesDuration{Duration: 1399 * time.Second},
