@@ -77,7 +77,8 @@ func (e *ItunesExplicit) UnmarshalText(text []byte) error {
 type ItunesType int
 
 const (
-	ItunesEpisodic ItunesType = iota
+	ItunesUnknown ItunesType = iota
+	ItunesEpisodic
 	ItunesSerial
 )
 
@@ -85,8 +86,10 @@ func (t *ItunesType) UnmarshalText(text []byte) error {
 	switch strings.ToLower(strings.TrimSpace(string(text))) {
 	case "serial":
 		*t = ItunesSerial
-	default:
+	case "episodic":
 		*t = ItunesEpisodic
+	default:
+		*t = ItunesUnknown
 	}
 	return nil
 }
@@ -94,7 +97,8 @@ func (t *ItunesType) UnmarshalText(text []byte) error {
 type ItunesEpisodeType int
 
 const (
-	ItunesFull ItunesEpisodeType = iota
+	ItunesUnknownEpisode ItunesEpisodeType = iota
+	ItunesFull
 	ItunesTrailer
 	ItunesBonus
 )
@@ -105,8 +109,10 @@ func (t *ItunesEpisodeType) UnmarshalText(text []byte) error {
 		*t = ItunesTrailer
 	case "bonus":
 		*t = ItunesBonus
-	default:
+	case "full":
 		*t = ItunesFull
+	default:
+		*t = ItunesUnknownEpisode
 	}
 	return nil
 }
